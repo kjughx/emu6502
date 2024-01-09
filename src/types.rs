@@ -3,19 +3,39 @@ use std::ops::{
     Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
-use crate::cpu::Flag;
+use crate::hardware::cpu::Flag;
 
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub struct Byte(pub u8);
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Addr(pub u16);
 #[derive(PartialEq, PartialOrd)]
 pub struct Bit(pub bool);
 
+impl core::fmt::Display for Bit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0 as u8)
+    }
+}
+
+impl Sub<u8> for Addr {
+    type Output = Addr;
+    fn sub(self, rhs: u8) -> Self::Output {
+        Self(self.0 - rhs as u16)
+    }
+}
+
+impl Not for Flag {
+    type Output = u8;
+    fn not(self) -> Self::Output {
+        !(1 << (self as u8))
+    }
+}
+
 impl Shl<Flag> for Bit {
     type Output = Byte;
     fn shl(self, rhs: Flag) -> Self::Output {
-        Byte(self.0 as u8) << rhs as u8
+        Byte((self.0 as u8) << (rhs as u8))
     }
 }
 
@@ -65,7 +85,7 @@ impl BitXor<Bit> for Bit {
 impl BitAnd<Bit> for Bit {
     type Output = Bit;
     fn bitand(self, rhs: Bit) -> Self::Output {
-        Bit(self.0 & rhs.0)
+        Bit(self.0 == rhs.0)
     }
 }
 impl Add<Bit> for Byte {
@@ -83,7 +103,9 @@ impl Add<Byte> for Bit {
 impl BitAnd<Flag> for Byte {
     type Output = Bit;
     fn bitand(self, rhs: Flag) -> Self::Output {
-        Bit((self.0 & (rhs as u8)) != 0)
+        println!("{:#08b} & {:#08b}", self.0, 1 << rhs as u8);
+        println!("");
+        Bit((self.0 & ((1 << rhs as u8))) != 0)
     }
 }
 

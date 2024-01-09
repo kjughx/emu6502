@@ -1,12 +1,12 @@
 use super::InstructionArgument;
-use crate::cpu::{Flag, CPU};
+use crate::hardware::cpu::{Flag, CPU};
 use crate::types::Bit;
 
 pub fn lda(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     };
     cpu.a = val;
     cpu.set(Flag::Negative, cpu.a & Flag::Negative);
@@ -17,7 +17,7 @@ pub fn ldx(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     };
     cpu.x = val;
     cpu.set(Flag::Negative, cpu.x & Flag::Negative);
@@ -28,7 +28,7 @@ pub fn ldy(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     };
     cpu.y = val;
     cpu.set(Flag::Negative, cpu.y & Flag::Negative);

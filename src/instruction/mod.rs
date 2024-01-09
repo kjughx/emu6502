@@ -4,11 +4,15 @@ pub mod load_store;
 pub mod logical;
 pub mod shift;
 
-use crate::cpu::{Flag, CPU};
+use std::fmt::Display;
+
+use crate::hardware::cpu::{Flag, CPU};
 use crate::types::*;
 
+#[derive(Debug)]
 pub enum InstructionArgument {
     Immediate(Byte),
+    Offset(Byte),
     Address(Addr),
     Implied,
 }
@@ -44,7 +48,7 @@ impl AddressingMode {
             AddressingMode::Absolute => {
                 let low_addr = cpu.next_instruction();
                 let hi_addr = cpu.next_instruction();
-                InstructionArgument::Address(Addr::from(hi_addr << 8) | low_addr)
+                InstructionArgument::Address(Addr::from(hi_addr) << 8 | low_addr)
             }
             AddressingMode::AbsoluteX => {
                 let low_addr = cpu.next_instruction();
@@ -77,7 +81,7 @@ impl AddressingMode {
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
             }
             AddressingMode::Relative => {
-                InstructionArgument::Address(cpu.pc + cpu.next_instruction())
+                InstructionArgument::Offset(cpu.next_instruction())
             }
             AddressingMode::Implied => InstructionArgument::Implied,
         }
@@ -101,6 +105,45 @@ pub enum Instruction {
     SEC, SED, SEI, STA,
     STX, STY, TAX, TAY,
     TSX, TXA, TXS, TYA,
+    XXX,
+}
+
+#[rustfmt::skip]
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let txt = match self {
+            Instruction::ADC => "ADC", Instruction::AND => "AND",
+            Instruction::ASL => "ASL", Instruction::BCC => "BCC",
+            Instruction::BCS => "BCS", Instruction::BEQ => "BEQ",
+            Instruction::BIT => "BIT", Instruction::BMI => "BMI",
+            Instruction::BNE => "BNE", Instruction::BPL => "BPL",
+            Instruction::BRK => "BRK", Instruction::BVC => "BVC",
+            Instruction::BVS => "BVS", Instruction::CLC => "CLC",
+            Instruction::CLD => "CLD", Instruction::CLI => "CLI",
+            Instruction::CLV => "CLV", Instruction::CMP => "CMP",
+            Instruction::CPX => "CPX", Instruction::CPY => "CPY",
+            Instruction::DEC => "DEC", Instruction::DEX => "DEX",
+            Instruction::DEY => "DEY", Instruction::EOR => "EOR",
+            Instruction::INC => "INC", Instruction::INX => "INX",
+            Instruction::INY => "INY", Instruction::JMP => "JMP",
+            Instruction::JSR => "JSR", Instruction::LDA => "LDA",
+            Instruction::LDX => "LDX", Instruction::LDY => "LDY",
+            Instruction::LSR => "LSR", Instruction::NOP => "NOP",
+            Instruction::ORA => "ORA", Instruction::PHA => "PHA",
+            Instruction::PHP => "PHP", Instruction::PLA => "PLA",
+            Instruction::PLP => "PLP", Instruction::ROL => "ROL",
+            Instruction::ROR => "ROR", Instruction::RTI => "RTI",
+            Instruction::RTS => "RTS", Instruction::SBC => "SBC",
+            Instruction::SEC => "SEC", Instruction::SED => "SED",
+            Instruction::SEI => "SEI", Instruction::STA => "STA",
+            Instruction::STX => "STX", Instruction::STY => "STY",
+            Instruction::TAX => "TAX", Instruction::TAY => "TAY",
+            Instruction::TSX => "TSX", Instruction::TXA => "TXA",
+            Instruction::TXS => "TXS", Instruction::TYA => "TYA",
+            Instruction::XXX => "XXX",
+        };
+        write!(f, "{txt}")
+    }
 }
 
 impl Instruction {
@@ -111,19 +154,19 @@ impl Instruction {
             Instruction::LDY => load_store::ldy(arg, cpu),
             Instruction::STA => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Argument is always an address")
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.write_memory(addr, cpu.a)
             }
             Instruction::STX => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Argument is always an address")
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.write_memory(addr, cpu.x);
             }
             Instruction::STY => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Argument is always an address")
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.write_memory(addr, cpu.y);
             }
@@ -206,16 +249,16 @@ impl Instruction {
             // Jumps & Calls
             Instruction::JMP => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.pc = addr;
             }
             Instruction::JSR => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from((cpu.pc & 0xff00) + 1));
+                cpu.push_stack(Byte::from((cpu.pc & 0xff) + 1));
                 cpu.pc = addr;
             }
             Instruction::RTS => {
@@ -228,7 +271,7 @@ impl Instruction {
             // Branches
             Instruction::BCC => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
 
                 if !cpu.is_set(Flag::Carry) {
@@ -237,7 +280,7 @@ impl Instruction {
             }
             Instruction::BCS => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Carry) {
                     cpu.pc = addr;
@@ -245,7 +288,7 @@ impl Instruction {
             }
             Instruction::BEQ => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Zero) {
                     cpu.pc = addr;
@@ -253,39 +296,41 @@ impl Instruction {
             }
             Instruction::BMI => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Negative) {
                     cpu.pc = addr;
                 }
             }
             Instruction::BNE => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                let InstructionArgument::Offset(offset) = arg else {
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if !cpu.is_set(Flag::Zero) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1);
+                    }
                 }
             }
             Instruction::BPL => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if !cpu.is_set(Flag::Negative) {
-                    cpu.pc = addr;
+                    cpu.pc += *addr;
                 }
             }
             Instruction::BVC => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if !cpu.is_set(Flag::Overflow) {
-                    cpu.pc = addr;
+                    cpu.pc += *addr;
                 }
             }
             Instruction::BVS => {
                 let InstructionArgument::Address(addr) = arg else {
-                    unreachable!()
+                    unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Overflow) {
                     cpu.pc = addr;
@@ -304,7 +349,7 @@ impl Instruction {
             // System Functions
             Instruction::BRK => {
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from(cpu.pc & 0b11111111));
+                cpu.push_stack(Byte::from(cpu.pc & 0xff));
                 cpu.push_stack(cpu.ps);
                 let low_addr = cpu.read_memory(Addr::from(0xfffe));
                 let hi_addr = cpu.read_memory(Addr::from(0xffff));
@@ -314,10 +359,12 @@ impl Instruction {
             Instruction::NOP => {}
             Instruction::RTI => {
                 cpu.ps = cpu.pop_stack();
+                cpu.set(Flag::BreakCmd, Bit(false));
                 let low_addr = cpu.pop_stack();
                 let hi_addr = cpu.pop_stack();
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
             }
+            Instruction::XXX => cpu.halt(),
         }
     }
 }
@@ -344,7 +391,8 @@ impl From<Byte> for AddressingMode {
             0x00 | 0x18 | 0xd8 | 0x58 | 0xb8 | 0xca | 0x88 | 0xe8 | 0xc8 | 0xea | 0x48 | 0x08
             | 0x68 | 0x28 | 0x40 | 0x60 | 0x38 | 0xf8 | 0x78 | 0xaa | 0xa8 | 0xba | 0x8a | 0x9a
             | 0x0a | 0x4a | 0x2a | 0x7a => AddressingMode::Implied,
-            _ => unreachable!(),
+            0xff => AddressingMode::Implied,
+            _ => unreachable!("Illegal opcode: {}", value.0)
         }
     }
 }
@@ -408,7 +456,8 @@ impl From<Byte> for Instruction {
             0xC8 => Instruction::INY,
             0x40 => Instruction::RTI,
             0x98 => Instruction::TYA,
-            _ => unreachable!(),
+            0xff => Instruction::XXX,
+            _ => unreachable!("Illegal opcode: {}", value.0),
         }
     }
 }

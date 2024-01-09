@@ -1,12 +1,12 @@
 use super::InstructionArgument;
-use crate::cpu::{Flag, CPU};
+use crate::hardware::cpu::{Flag, CPU};
 use crate::types::*;
 
 pub fn adc(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
 
     let sum = cpu.a + val + (cpu.ps & Flag::Carry);
@@ -14,7 +14,7 @@ pub fn adc(arg: InstructionArgument, cpu: &mut CPU) {
         Flag::Overflow,
         ((cpu.a & Flag::Negative) & (val & Flag::Negative)) ^ (sum & Flag::Negative),
     );
-    cpu.set(Flag::Zero, Bit::from(sum));
+    cpu.set(Flag::Zero, Bit(sum == 0));
     cpu.set(Flag::Negative, sum & Flag::Negative);
     cpu.set(Flag::Carry, Bit(sum < cpu.a || sum < val));
     cpu.a = sum;
@@ -24,7 +24,7 @@ pub fn sbc(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
     let sub = cpu.a + (val & !(0xff)) + (cpu.ps & Flag::Carry);
     cpu.set(
@@ -41,7 +41,7 @@ pub fn cmp(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
 
     cpu.set(Flag::Carry, Bit(cpu.a >= val));
@@ -53,7 +53,7 @@ pub fn cpx(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
 
     cpu.set(Flag::Carry, Bit(cpu.x >= val));
@@ -65,7 +65,7 @@ pub fn cpy(arg: InstructionArgument, cpu: &mut CPU) {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read_memory(addr),
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
 
     cpu.set(Flag::Carry, Bit(cpu.y >= val));

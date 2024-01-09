@@ -1,11 +1,20 @@
-use crate::*;
-use bus::{Bus, STACK_END, STACK_START};
-use instruction::{AddressingMode, Instruction};
+use super::bus::{Bus, STACK_END, STACK_START};
+use crate::instruction::{AddressingMode, Instruction};
+use crate::types::*;
 use std::fmt::Display;
-use types::*;
 
+/// @brief: The processor status flags
+///
+/// @Carry: Set if last operation overflow bit 7 or underflowed bit 0
+/// @Zero: Set if last operation resulted in zero
+/// @InterruptDisable: Set if interrupts should be ignored
+/// @DecimalMode: Not Supported
+/// @BreakCmd: Set if the BRK instruction was executed
+/// @Unused: Unused
+/// @Overflow: Set if last operation yieled incorrect 2's complement
+/// @Negative: Set if last operation resulted in a negative value
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Flag {
     Carry,
     Zero,
@@ -42,23 +51,25 @@ impl<'a> CPU<'a> {
         Self {
             pc: Addr(0xfffc),
             sp: Byte(0xfd),
-            a: Byte(0),
-            x: Byte(0),
-            y: Byte(0),
-            ps: Byte(0),
+            a: Byte(0x00),
+            x: Byte(0x00),
+            y: Byte(0x00),
+            ps: Byte(0x00),
             bus,
         }
     }
 
     pub fn is_set(&self, flag: Flag) -> bool {
-        (self.ps & flag) == Bit(true)
+        (self.ps & flag).0
     }
 
     pub fn set(&mut self, flag: Flag, bit: Bit) {
         if bit.0 {
-            self.ps |= bit << flag;
+            self.ps |= Byte(1 << (flag as u8));
+            dbg!("Setting flag", flag, self.ps);
         } else {
-            self.ps &= !(bit << flag);
+            self.ps &= !Byte(1 << (flag as u8));
+            dbg!("Clearing flag", flag, self.ps);
         }
     }
 
@@ -97,36 +108,46 @@ impl<'a> CPU<'a> {
         self.bus.write(addr, data)
     }
 
-    pub fn nmi_interrupt(&mut self) {
-        if self.is_set(Flag::InterruptDisable) {
-            return;
-        }
-
-        self.push_stack(Byte::from(self.pc >> 8));
-        self.push_stack(Byte::from(self.pc & 0xff));
-        self.push_stack(self.ps);
-        let low_addr = self.read_memory(Addr::from(0xfffa));
-        let hi_addr = self.read_memory(Addr::from(0xfffb));
-        self.pc = (Addr::from(hi_addr) << 8) | low_addr;
-        self.set(Flag::BreakCmd, Bit(true));
-    }
-
     pub fn reset(&mut self) {
-        self.ps = Byte::from(0);
-        self.a = Byte::from(0);
+        self.ps = Byte::from(0x00);
+        self.a = Byte::from(0x00);
         self.sp = Byte::from(0xfd);
         let low_addr = self.read_memory(Addr::from(0xfffc));
         let hi_addr = Addr::from(self.read_memory(Addr::from(0xfffd)));
         self.pc = (hi_addr << 8) | low_addr;
     }
+    pub fn irq(&mut self) {
+        if self.is_set(Flag::InterruptDisable) {
+            return;
+        }
 
-    pub fn halt(&self) -> ! {
+        self.set(Flag::InterruptDisable, Bit(true));
+        self.set(Flag::BreakCmd, Bit(false));
+
+        self.push_stack(Byte::from(self.pc & 0x00ff));
+        self.push_stack(Byte::from(self.pc & 0xff00));
+        self.push_stack(self.ps);
+        let low_addr = self.read_memory(Addr::from(0xfffe));
+        let hi_addr = self.read_memory(Addr::from(0xffff));
+        self.pc = (Addr::from(hi_addr) << 8) | low_addr;
+    }
+
+    pub fn nmi_irq(&mut self) {
+        self.set(Flag::InterruptDisable, Bit(true));
+        self.set(Flag::BreakCmd, Bit(false));
+
+        self.push_stack(Byte::from(self.pc & 0x00ff));
+        self.push_stack(Byte::from(self.pc & 0xff00));
+        self.push_stack(self.ps);
+        let low_addr = self.read_memory(Addr::from(0xfffa));
+        let hi_addr = self.read_memory(Addr::from(0xfffb));
+        self.pc = (Addr::from(hi_addr) << 8) | low_addr;
+    }
+
+    pub fn halt(&self) {
         eprintln!("CPU halted!");
         println!("State of CPU: ");
         println!("{self}");
-
-        #[allow(clippy::empty_loop)]
-        loop {}
     }
 
     pub fn exec(&mut self) {
@@ -142,7 +163,7 @@ impl Display for CPU<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "\tPC: {:#06x}\n\tSP: {:#02x}\n\ta: {}, x: {}, y: {}\n\tPS: {:#010b}",
+            "\tPC: {:#06x}\n\tSP: {:#02x}\n\ta: {:#02x}, x: {:#02x}, y: {:#02x}\n\tPS: {:#010b}",
             self.pc.0, self.sp.0, self.a.0, self.x.0, self.y.0, self.ps.0
         )
     }

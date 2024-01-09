@@ -1,5 +1,5 @@
 use super::InstructionArgument;
-use crate::cpu::{Flag, CPU};
+use crate::hardware::cpu::{Flag, CPU};
 use crate::types::{Bit, Byte};
 
 pub fn asl(arg: InstructionArgument, cpu: &mut CPU) {
@@ -18,7 +18,7 @@ pub fn asl(arg: InstructionArgument, cpu: &mut CPU) {
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write_memory(addr, val);
         }
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     }
 }
 
@@ -38,7 +38,7 @@ pub fn lsr(arg: InstructionArgument, cpu: &mut CPU) {
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write_memory(addr, val);
         }
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     }
 }
 
@@ -60,7 +60,7 @@ pub fn rol(arg: InstructionArgument, cpu: &mut CPU) {
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write_memory(addr, val);
         }
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     }
 }
 
@@ -82,6 +82,6 @@ pub fn ror(arg: InstructionArgument, cpu: &mut CPU) {
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write_memory(addr, val);
         }
-        _ => unreachable!(),
+        _ => unreachable!("Illegal addressing mode: {:?}", arg)
     }
 }

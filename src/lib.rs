@@ -1,4 +1,3 @@
-pub mod bus;
-pub mod cpu;
+pub mod hardware;
 pub mod instruction;
 pub mod types;

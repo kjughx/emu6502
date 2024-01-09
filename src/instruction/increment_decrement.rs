@@ -1,10 +1,10 @@
 use super::InstructionArgument;
-use crate::cpu::{Flag, CPU};
+use crate::hardware::cpu::{Flag, CPU};
 use crate::types::Bit;
 
 pub fn inc(arg: InstructionArgument, cpu: &mut CPU) {
     let InstructionArgument::Address(addr) = arg else {
-        unreachable!()
+        unreachable!("Illegal addressing mode: {:?}", arg)
     };
 
     let val = cpu.read_memory(addr) + 1;
@@ -25,7 +25,7 @@ pub fn iny(_arg: InstructionArgument, cpu: &mut CPU) {
 
 pub fn dec(arg: InstructionArgument, cpu: &mut CPU) {
     let InstructionArgument::Address(addr) = arg else {
-        unreachable!()
+        unreachable!("Illegal addressing mode: {:?}", arg)
     };
 
     let val = cpu.read_memory(addr) - 1;
