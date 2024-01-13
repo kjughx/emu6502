@@ -1,4 +1,5 @@
 use crate::types::{Addr, Byte};
+use std::path::Path;
 
 pub const MEMORY_SIZE: usize = 1024 * 64;
 pub const STACK_START: Addr = Addr(0x100);
@@ -18,7 +19,7 @@ impl Default for Bus {
 
 impl Bus {
     pub fn new() -> Self {
-        let mut data = [Byte(0); MEMORY_SIZE];
+        let mut data = [Byte(0xff); MEMORY_SIZE];
         data[0x100..0x01ff].copy_from_slice(&[Byte(0xff); STACK_SIZE]);
         Self { data }
     }
@@ -37,5 +38,19 @@ impl Bus {
             self.data[addr.0 as usize] = Byte(byte);
             addr.0 += 1;
         }
+    }
+
+    pub fn load_file(
+        &mut self,
+        mut start: Addr,
+        path: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let data = std::fs::read(path)?;
+        for byte in data {
+            self.data[start.0 as usize] = Byte(byte);
+            start += 1;
+        }
+
+        Ok(())
     }
 }

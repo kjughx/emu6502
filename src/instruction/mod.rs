@@ -6,6 +6,8 @@ pub mod shift;
 
 use std::fmt::Display;
 
+use phf::phf_map;
+
 use crate::hardware::cpu::{Flag, CPU};
 use crate::types::*;
 
@@ -17,6 +19,7 @@ pub enum InstructionArgument {
     Implied,
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum AddressingMode {
     Immediate,
     ZeroPage,
@@ -80,15 +83,13 @@ impl AddressingMode {
                 let hi_addr = cpu.read_memory((_addr + 1).into());
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
             }
-            AddressingMode::Relative => {
-                InstructionArgument::Offset(cpu.next_instruction())
-            }
+            AddressingMode::Relative => InstructionArgument::Offset(cpu.next_instruction()),
             AddressingMode::Implied => InstructionArgument::Implied,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 #[rustfmt::skip]
 pub enum Instruction {
     ADC, AND, ASL, BCC,
@@ -143,6 +144,43 @@ impl Display for Instruction {
             Instruction::XXX => "XXX",
         };
         write!(f, "{txt}")
+    }
+}
+
+#[rustfmt::skip]
+impl Into<Instruction> for &str {
+    fn into(self) -> Instruction {
+        match self {
+            "ADC" => Instruction::ADC, "AND" => Instruction::AND,
+            "ASL" => Instruction::ASL, "BCC" => Instruction::BCC,
+            "BCS" => Instruction::BCS, "BEQ" => Instruction::BEQ,
+            "BIT" => Instruction::BIT, "BMI" => Instruction::BMI,
+            "BNE" => Instruction::BNE, "BPL" => Instruction::BPL,
+            "BRK" => Instruction::BRK, "BVC" => Instruction::BVC,
+            "BVS" => Instruction::BVS, "CLC" => Instruction::CLC,
+            "CLD" => Instruction::CLD, "CLI" => Instruction::CLI,
+            "CLV" => Instruction::CLV, "CMP" => Instruction::CMP,
+            "CPX" => Instruction::CPX, "CPY" => Instruction::CPY,
+            "DEC" => Instruction::DEC, "DEX" => Instruction::DEX,
+            "DEY" => Instruction::DEY, "EOR" => Instruction::EOR,
+            "INC" => Instruction::INC, "INX" => Instruction::INX,
+            "INY" => Instruction::INY, "JMP" => Instruction::JMP,
+            "JSR" => Instruction::JSR, "LDA" => Instruction::LDA,
+            "LDX" => Instruction::LDX, "LDY" => Instruction::LDY,
+            "LSR" => Instruction::LSR, "NOP" => Instruction::NOP,
+            "ORA" => Instruction::ORA, "PHA" => Instruction::PHA,
+            "PHP" => Instruction::PHP, "PLA" => Instruction::PLA,
+            "PLP" => Instruction::PLP, "ROL" => Instruction::ROL,
+            "ROR" => Instruction::ROR, "RTI" => Instruction::RTI,
+            "RTS" => Instruction::RTS, "SBC" => Instruction::SBC,
+            "SEC" => Instruction::SEC, "SED" => Instruction::SED,
+            "SEI" => Instruction::SEI, "STA" => Instruction::STA,
+            "STX" => Instruction::STX, "STY" => Instruction::STY,
+            "TAX" => Instruction::TAX, "TAY" => Instruction::TAY,
+            "TSX" => Instruction::TSX, "TXA" => Instruction::TXA,
+            "TXS" => Instruction::TXS, "TYA" => Instruction::TYA,
+            _ => Instruction::XXX,
+        }
     }
 }
 
@@ -367,97 +405,424 @@ impl Instruction {
             Instruction::XXX => cpu.halt(),
         }
     }
-}
 
-#[rustfmt::skip]
-impl From<Byte> for AddressingMode {
-    fn from(value: Byte) -> Self {
-        match value.0 {
-            0x69 | 0x29 | 0xe0 | 0xc0 | 0x49 | 0xa9 | 0xa2 | 0xa0 | 0x09 | 0xe9 => AddressingMode::Immediate,
-            0x65 | 0x25 | 0x06 | 0x24 | 0xc5 | 0xe4 | 0xc4 | 0xc6 | 0x45 | 0xe6 | 0xa5 | 0xa6
-            | 0xa4 | 0x46 | 0x05 | 0x26 | 0x66 | 0xe5 | 0x85 | 0x86 | 0x84 => AddressingMode::ZeroPage,
-            0x75 | 0x35 | 0x16 | 0xd5 | 0xd6 | 0x55 | 0xf6 | 0xb5 | 0xb4 | 0x56 | 0x15 | 0x36
-            | 0x76 | 0xf5 | 0x95 | 0x94 => AddressingMode::ZeroPageX,
-            0xb6 | 0x96 => AddressingMode::ZeroPageY,
-            0x6d | 0x2d | 0x0e | 0x2c | 0xcd | 0xec | 0xcc | 0xce | 0x4d | 0xee | 0x4c | 0x20
-            | 0xad | 0xae | 0xac | 0x4e | 0x0d | 0x2e | 0x6e | 0xed | 0x8d | 0x8e | 0x8c => AddressingMode::Absolute,
-            0x7d | 0x3d | 0x1e | 0xdd | 0xde | 0x5d | 0xfe | 0xbd | 0xbc | 0x5e | 0x1d | 0x3e
-            | 0x7e | 0xfd | 0x9d => AddressingMode::AbsoluteX,
-            0x79 | 0x39 | 0xd9 | 0x59 | 0xb9 | 0xbe | 0x19 | 0xf9 | 0x99 => AddressingMode::AbsoluteY,
-            0x6c => AddressingMode::Indirect,
-            0x61 | 0x21 | 0xc1 | 0x41 | 0xa1 | 0x01 | 0xe1 | 0x81 => AddressingMode::IndirectX,
-            0x71 | 0x31 | 0xd1 | 0x51 | 0xb1 | 0x11 | 0xf1 | 0x91 => AddressingMode::IndirectY,
-            0x90 | 0xb0 | 0xf0 | 0x30 | 0xd0 | 0x10 | 0x50 | 0x70 => AddressingMode::Relative,
-            0x00 | 0x18 | 0xd8 | 0x58 | 0xb8 | 0xca | 0x88 | 0xe8 | 0xc8 | 0xea | 0x48 | 0x08
-            | 0x68 | 0x28 | 0x40 | 0x60 | 0x38 | 0xf8 | 0x78 | 0xaa | 0xa8 | 0xba | 0x8a | 0x9a
-            | 0x0a | 0x4a | 0x2a | 0x7a => AddressingMode::Implied,
-            0xff => AddressingMode::Implied,
-            _ => unreachable!("Illegal opcode: {}", value.0)
+    pub fn valid_address_mode(&self, addressing_mode: AddressingMode) -> bool {
+        match self {
+            Instruction::ADC => match addressing_mode {
+                AddressingMode::Immediate => true,
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                _ => false,
+            },
+            Instruction::AND => match addressing_mode {
+                AddressingMode::Immediate => true,
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::Indirect => true,
+                _ => false,
+            },
+
+            Instruction::ASL => match addressing_mode {
+                AddressingMode::Implied => true,
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::TSX => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::CMP => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::RTS => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::DEX => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::DEY => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::STA => match addressing_mode {
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::PHA => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::LDA => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::LSR => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::ORA => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::SEC => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::SED => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::BNE => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::PLA => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::PHP => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::SEI => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::STX => match addressing_mode {
+                AddressingMode::ZeroPageY => true,
+                AddressingMode::Absolute => true,
+                _ => false,
+            },
+
+            Instruction::STY => match addressing_mode {
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                _ => false,
+            },
+
+            Instruction::LDX => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageY => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteY => true,
+                _ => false,
+            },
+
+            Instruction::LDY => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::ROL => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::BPL => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::PLP => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::CLC => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::ROR => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::CLD => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::BRK => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::BCC => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::CLI => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::BVC => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::TXA => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::TAX => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::NOP => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::TAY => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::EOR => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::CLV => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::BCS => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::JMP => matches!(addressing_mode, AddressingMode::Absolute),
+
+            Instruction::BVS => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::BEQ => matches!(addressing_mode, AddressingMode::Relative),
+            Instruction::TXS => matches!(addressing_mode, AddressingMode::Implied),
+
+            Instruction::SBC => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                AddressingMode::AbsoluteY => true,
+                AddressingMode::IndirectX => true,
+                AddressingMode::IndirectY => true,
+                _ => false,
+            },
+
+            Instruction::CPX => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::Absolute => true,
+                _ => false,
+            },
+
+            Instruction::CPY => match addressing_mode {
+                AddressingMode::ZeroPage => true,
+                AddressingMode::Absolute => true,
+                _ => false,
+            },
+
+            Instruction::BIT => match addressing_mode {
+                AddressingMode::Absolute => true,
+                _ => false,
+            },
+
+            Instruction::BMI => matches!(addressing_mode, AddressingMode::Relative),
+
+            Instruction::JSR => matches!(addressing_mode, AddressingMode::Absolute),
+
+            Instruction::INC => match addressing_mode {
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::DEC => match addressing_mode {
+                AddressingMode::ZeroPageX => true,
+                AddressingMode::Absolute => true,
+                AddressingMode::AbsoluteX => true,
+                _ => false,
+            },
+
+            Instruction::INX => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::INY => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::RTI => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::TYA => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::XXX => matches!(addressing_mode, AddressingMode::Implied),
         }
     }
 }
 
-impl From<Byte> for Instruction {
-    fn from(value: Byte) -> Self {
-        match value.0 {
-            0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => Instruction::ADC,
-            0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x21 | 0x31 => Instruction::AND,
-            0x0A | 0x06 | 0x16 | 0x0E | 0x1E => Instruction::ASL,
-            0xBA => Instruction::TSX,
-            0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => Instruction::CMP,
-            0x60 => Instruction::RTS,
-            0xCA => Instruction::DEX,
-            0x88 => Instruction::DEY,
-            0x85 | 0x95 | 0x8D | 0x9D | 0x99 | 0x81 | 0x91 => Instruction::STA,
-            0x48 => Instruction::PHA,
-            0xA9 | 0xA5 | 0xB5 | 0xAD | 0xBD | 0xB9 | 0xA1 | 0xB1 => Instruction::LDA,
-            0x4A | 0x46 | 0x56 | 0x4E | 0x5E => Instruction::LSR,
-            0x09 | 0x05 | 0x15 | 0x0D | 0x1D | 0x19 | 0x01 | 0x11 => Instruction::ORA,
-            0x38 => Instruction::SEC,
-            0xF8 => Instruction::SED,
-            0xD0 => Instruction::BNE,
-            0x68 => Instruction::PLA,
-            0x08 => Instruction::PHP,
-            0x78 => Instruction::SEI,
-            0x86 | 0x96 | 0x8E => Instruction::STX,
-            0x84 | 0x94 | 0x8C => Instruction::STY,
-            0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => Instruction::LDX,
-            0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => Instruction::LDY,
-            0x2A | 0x26 | 0x36 | 0x2E | 0x3E => Instruction::ROL,
-            0x10 => Instruction::BPL,
-            0x28 => Instruction::PLP,
-            0x18 => Instruction::CLC,
-            0x6A | 0x66 | 0x76 | 0x6E | 0x7E => Instruction::ROR,
-            0xD8 => Instruction::CLD,
-            0x00 => Instruction::BRK,
-            0x90 => Instruction::BCC,
-            0x58 => Instruction::CLI,
-            0x50 => Instruction::BVC,
-            0x8A => Instruction::TXA,
-            0xAA => Instruction::TAX,
-            0xEA => Instruction::NOP,
-            0xA8 => Instruction::TAY,
-            0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => Instruction::EOR,
-            0xB8 => Instruction::CLV,
-            0xB0 => Instruction::BCS,
-            0x4C | 0x6C => Instruction::JMP,
-            0x70 => Instruction::BVS,
-            0xF0 => Instruction::BEQ,
-            0x9A => Instruction::TXS,
-            0xE9 | 0xE5 | 0xF5 | 0xED | 0xFD | 0xF9 | 0xE1 | 0xF1 => Instruction::SBC,
-            0xE0 | 0xE4 | 0xEC => Instruction::CPX,
-            0xC0 | 0xC4 | 0xCC => Instruction::CPY,
-            0x24 | 0x2C => Instruction::BIT,
-            0x30 => Instruction::BMI,
-            0x20 => Instruction::JSR,
-            0xE6 | 0xF6 | 0xEE | 0xFE => Instruction::INC,
-            0xC6 | 0xD6 | 0xCE | 0xDE => Instruction::DEC,
-            0xE8 => Instruction::INX,
-            0xC8 => Instruction::INY,
-            0x40 => Instruction::RTI,
-            0x98 => Instruction::TYA,
-            0xff => Instruction::XXX,
-            _ => unreachable!("Illegal opcode: {}", value.0),
-        }
-    }
-}
+pub static INSTRUCTIONS: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! {
+    0x69u8 => (Instruction::ADC, AddressingMode::Immediate),
+    0x65u8 => (Instruction::ADC, AddressingMode::ZeroPage),
+    0x75u8 => (Instruction::ADC, AddressingMode::ZeroPageX),
+    0x6Du8 => (Instruction::ADC, AddressingMode::Absolute),
+    0x7Du8 => (Instruction::ADC, AddressingMode::AbsoluteX),
+    0x79u8 => (Instruction::ADC, AddressingMode::AbsoluteY),
+    0x61u8 => (Instruction::ADC, AddressingMode::IndirectX),
+    0x71u8 => (Instruction::ADC, AddressingMode::IndirectY),
+
+    0x29u8 => (Instruction::AND, AddressingMode::Immediate),
+    0x25u8 => (Instruction::AND, AddressingMode::ZeroPage),
+    0x35u8 => (Instruction::AND, AddressingMode::ZeroPageX),
+    0x2Du8 => (Instruction::AND, AddressingMode::Absolute),
+    0x3Du8 => (Instruction::AND, AddressingMode::AbsoluteX),
+    0x39u8 => (Instruction::AND, AddressingMode::AbsoluteY),
+    0x21u8 => (Instruction::AND, AddressingMode::IndirectX),
+    0x31u8 => (Instruction::AND, AddressingMode::Indirect),
+
+    0x0Au8 => (Instruction::ASL, AddressingMode::Implied),
+    0x06u8 => (Instruction::ASL, AddressingMode::ZeroPage),
+    0x16u8 => (Instruction::ASL, AddressingMode::ZeroPageX),
+    0x0Eu8 => (Instruction::ASL, AddressingMode::Absolute),
+    0x1Eu8 => (Instruction::ASL, AddressingMode::AbsoluteX),
+
+    0xBAu8 => (Instruction::TSX, AddressingMode::Implied),
+
+    0xC9u8 => (Instruction::CMP, AddressingMode::Immediate),
+    0xC5u8 => (Instruction::CMP, AddressingMode::ZeroPage),
+    0xD5u8 => (Instruction::CMP, AddressingMode::ZeroPageX),
+    0xCDu8 => (Instruction::CMP, AddressingMode::Absolute),
+    0xDDu8 => (Instruction::CMP, AddressingMode::AbsoluteX),
+    0xD9u8 => (Instruction::CMP, AddressingMode::AbsoluteY),
+    0xC1u8 => (Instruction::CMP, AddressingMode::IndirectX),
+    0xD1u8 => (Instruction::CMP, AddressingMode::IndirectY),
+
+    0x60u8 => (Instruction::RTS, AddressingMode::Implied),
+
+    0xCAu8 => (Instruction::DEX, AddressingMode::Implied),
+
+    0x88u8 => (Instruction::DEY, AddressingMode::Implied),
+
+    0x85u8 => (Instruction::STA, AddressingMode::ZeroPage),
+    0x95u8 => (Instruction::STA, AddressingMode::ZeroPageX),
+    0x8Du8 => (Instruction::STA, AddressingMode::Absolute),
+    0x9Du8 => (Instruction::STA, AddressingMode::AbsoluteX),
+    0x99u8 => (Instruction::STA, AddressingMode::AbsoluteY),
+    0x81u8 => (Instruction::STA, AddressingMode::IndirectX),
+    0x91u8 => (Instruction::STA, AddressingMode::IndirectY),
+
+    0x48u8 => (Instruction::PHA, AddressingMode::Implied),
+
+    0xA9u8 => (Instruction::LDA, AddressingMode::Immediate),
+    0xA5u8 => (Instruction::LDA, AddressingMode::ZeroPage),
+    0xB5u8 => (Instruction::LDA, AddressingMode::ZeroPageX),
+    0xADu8 => (Instruction::LDA, AddressingMode::Absolute),
+    0xBDu8 => (Instruction::LDA, AddressingMode::AbsoluteX),
+    0xB9u8 => (Instruction::LDA, AddressingMode::AbsoluteY),
+    0xA1u8 => (Instruction::LDA, AddressingMode::IndirectX),
+    0xB1u8 => (Instruction::LDA, AddressingMode::IndirectY),
+
+    0x4Au8 => (Instruction::LSR, AddressingMode::Implied),
+    0x46u8 => (Instruction::LSR, AddressingMode::ZeroPage),
+    0x56u8 => (Instruction::LSR, AddressingMode::ZeroPageX),
+    0x4Eu8 => (Instruction::LSR, AddressingMode::Absolute),
+    0x5Eu8 => (Instruction::LSR, AddressingMode::AbsoluteX),
+
+    0x09u8 => (Instruction::ORA, AddressingMode::Immediate),
+    0x05u8 => (Instruction::ORA, AddressingMode::ZeroPage),
+    0x15u8 => (Instruction::ORA, AddressingMode::ZeroPageX),
+    0x0Du8 => (Instruction::ORA, AddressingMode::Absolute),
+    0x1Du8 => (Instruction::ORA, AddressingMode::AbsoluteX),
+    0x19u8 => (Instruction::ORA, AddressingMode::AbsoluteY),
+    0x01u8 => (Instruction::ORA, AddressingMode::IndirectX),
+    0x11u8 => (Instruction::ORA, AddressingMode::IndirectY),
+
+    0x38u8 => (Instruction::SEC, AddressingMode::Implied),
+    0xF8u8 => (Instruction::SED, AddressingMode::Implied),
+    0xD0u8 => (Instruction::BNE, AddressingMode::Relative),
+    0x68u8 => (Instruction::PLA, AddressingMode::Implied),
+    0x08u8 => (Instruction::PHP, AddressingMode::Implied),
+    0x78u8 => (Instruction::SEI, AddressingMode::Implied),
+
+    0x86u8 => (Instruction::STX, AddressingMode::ZeroPage),
+    0x96u8 => (Instruction::STX, AddressingMode::ZeroPageY),
+    0x8Eu8 => (Instruction::STX, AddressingMode::Absolute),
+
+    0x84u8 => (Instruction::STY, AddressingMode::ZeroPage),
+    0x94u8 => (Instruction::STY, AddressingMode::ZeroPageX),
+    0x8Cu8 => (Instruction::STY, AddressingMode::Absolute),
+
+    0xA2u8 => (Instruction::LDX, AddressingMode::Immediate),
+    0xA6u8 => (Instruction::LDX, AddressingMode::ZeroPage),
+    0xB6u8 => (Instruction::LDX, AddressingMode::ZeroPageY),
+    0xAEu8 => (Instruction::LDX, AddressingMode::Absolute),
+    0xBEu8 => (Instruction::LDX, AddressingMode::AbsoluteY),
+
+    0xA0u8 => (Instruction::LDY, AddressingMode::Implied),
+    0xA4u8 => (Instruction::LDY, AddressingMode::ZeroPage),
+    0xB4u8 => (Instruction::LDY, AddressingMode::ZeroPageX),
+    0xACu8 => (Instruction::LDY, AddressingMode::Absolute),
+    0xBCu8 => (Instruction::LDY, AddressingMode::AbsoluteX),
+
+    0x2Au8 => (Instruction::ROL, AddressingMode::Implied),
+    0x26u8 => (Instruction::ROL, AddressingMode::ZeroPage),
+    0x36u8 => (Instruction::ROL, AddressingMode::ZeroPageX),
+    0x2Eu8 => (Instruction::ROL, AddressingMode::Absolute),
+    0x3Eu8 => (Instruction::ROL, AddressingMode::AbsoluteX),
+
+    0x10u8 => (Instruction::BPL, AddressingMode::Relative),
+    0x28u8 => (Instruction::PLP, AddressingMode::Implied),
+    0x18u8 => (Instruction::CLC, AddressingMode::Implied),
+
+    0x6Au8 => (Instruction::ROR, AddressingMode::Implied),
+    0x66u8 => (Instruction::ROR, AddressingMode::ZeroPage),
+    0x76u8 => (Instruction::ROR, AddressingMode::ZeroPageX),
+    0x6Eu8 => (Instruction::ROR, AddressingMode::Absolute),
+    0x7Eu8 => (Instruction::ROR, AddressingMode::AbsoluteX),
+
+    0xD8u8 => (Instruction::CLD, AddressingMode::Implied),
+    0x00u8 => (Instruction::BRK, AddressingMode::Implied),
+    0x90u8 => (Instruction::BCC, AddressingMode::Relative),
+    0x58u8 => (Instruction::CLI, AddressingMode::Implied),
+    0x50u8 => (Instruction::BVC, AddressingMode::Relative),
+    0x8Au8 => (Instruction::TXA, AddressingMode::Implied),
+    0xAAu8 => (Instruction::TAX, AddressingMode::Implied),
+    0xEAu8 => (Instruction::NOP, AddressingMode::Implied),
+    0xA8u8 => (Instruction::TAY, AddressingMode::Implied),
+
+    0x49u8 => (Instruction::EOR, AddressingMode::Immediate),
+    0x45u8 => (Instruction::EOR, AddressingMode::ZeroPage),
+    0x55u8 => (Instruction::EOR, AddressingMode::ZeroPageX),
+    0x4Du8 => (Instruction::EOR, AddressingMode::Absolute),
+    0x5Du8 => (Instruction::EOR, AddressingMode::AbsoluteX),
+    0x59u8 => (Instruction::EOR, AddressingMode::AbsoluteY),
+    0x41u8 => (Instruction::EOR, AddressingMode::IndirectX),
+    0x51u8 => (Instruction::EOR, AddressingMode::IndirectY),
+
+    0xB8u8 => (Instruction::CLV, AddressingMode::Implied),
+    0xB0u8 => (Instruction::BCS, AddressingMode::Relative),
+    0x4Cu8 => (Instruction::JMP, AddressingMode::Absolute),
+    0x6Cu8 => (Instruction::JMP, AddressingMode::Indirect),
+
+    0x70u8 => (Instruction::BVS, AddressingMode::Relative),
+    0xF0u8 => (Instruction::BEQ, AddressingMode::Relative),
+    0x9Au8 => (Instruction::TXS, AddressingMode::Implied),
+
+    0xE9u8 => (Instruction::SBC, AddressingMode::Immediate),
+    0xE5u8 => (Instruction::SBC, AddressingMode::ZeroPage),
+    0xF5u8 => (Instruction::SBC, AddressingMode::ZeroPageX),
+    0xEDu8 => (Instruction::SBC, AddressingMode::Absolute),
+    0xFDu8 => (Instruction::SBC, AddressingMode::AbsoluteX),
+    0xF9u8 => (Instruction::SBC, AddressingMode::AbsoluteY),
+    0xE1u8 => (Instruction::SBC, AddressingMode::IndirectX),
+    0xF1u8 => (Instruction::SBC, AddressingMode::IndirectY),
+
+    0xE0u8 => (Instruction::CPX, AddressingMode::Immediate),
+    0xE4u8 => (Instruction::CPX, AddressingMode::ZeroPage),
+    0xECu8 => (Instruction::CPX, AddressingMode::Absolute),
+
+    0xC0u8 => (Instruction::CPY, AddressingMode::Immediate),
+    0xC4u8 => (Instruction::CPY, AddressingMode::ZeroPage),
+    0xCCu8 => (Instruction::CPY, AddressingMode::Absolute),
+
+    0x24u8 => (Instruction::BIT, AddressingMode::ZeroPage),
+    0x2Cu8 => (Instruction::BIT, AddressingMode::Absolute),
+
+    0x30u8 => (Instruction::BMI, AddressingMode::Relative),
+
+    0x20u8 => (Instruction::JSR, AddressingMode::Absolute),
+
+    0xE6u8 => (Instruction::INC, AddressingMode::ZeroPage),
+    0xF6u8 => (Instruction::INC, AddressingMode::ZeroPageX),
+    0xEEu8 => (Instruction::INC, AddressingMode::Absolute),
+    0xFEu8 => (Instruction::INC, AddressingMode::AbsoluteX),
+
+    0xC6u8 => (Instruction::DEC, AddressingMode::ZeroPage),
+    0xD6u8 => (Instruction::DEC, AddressingMode::ZeroPageX),
+    0xCEu8 => (Instruction::DEC, AddressingMode::Absolute),
+    0xDEu8 => (Instruction::DEC, AddressingMode::AbsoluteX),
+
+    0xE8u8 => (Instruction::INX, AddressingMode::Implied),
+    0xC8u8 => (Instruction::INY, AddressingMode::Implied),
+    0x40u8 => (Instruction::RTI, AddressingMode::Implied),
+    0x98u8 => (Instruction::TYA, AddressingMode::Implied),
+    0xffu8 => (Instruction::XXX, AddressingMode::Implied),
+};

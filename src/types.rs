@@ -103,8 +103,6 @@ impl Add<Byte> for Bit {
 impl BitAnd<Flag> for Byte {
     type Output = Bit;
     fn bitand(self, rhs: Flag) -> Self::Output {
-        println!("{:#08b} & {:#08b}", self.0, 1 << rhs as u8);
-        println!("");
         Bit((self.0 & ((1 << rhs as u8))) != 0)
     }
 }

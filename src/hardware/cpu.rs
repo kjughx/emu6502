@@ -1,5 +1,5 @@
 use super::bus::{Bus, STACK_END, STACK_START};
-use crate::instruction::{AddressingMode, Instruction};
+use crate::instruction::INSTRUCTIONS;
 use crate::types::*;
 use std::fmt::Display;
 
@@ -66,10 +66,8 @@ impl<'a> CPU<'a> {
     pub fn set(&mut self, flag: Flag, bit: Bit) {
         if bit.0 {
             self.ps |= Byte(1 << (flag as u8));
-            dbg!("Setting flag", flag, self.ps);
         } else {
             self.ps &= !Byte(1 << (flag as u8));
-            dbg!("Clearing flag", flag, self.ps);
         }
     }
 
@@ -152,8 +150,8 @@ impl<'a> CPU<'a> {
 
     pub fn exec(&mut self) {
         let op_code = self.next_instruction();
-        let arg = AddressingMode::from(op_code).get(self);
-        let instruction = Instruction::from(op_code);
+        let (instruction, addressing_mode) = &INSTRUCTIONS[&op_code];
+        let arg = addressing_mode.get(self);
 
         instruction.exec(arg, self);
     }
