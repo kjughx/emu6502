@@ -1,6 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use emu_6502::hardware::bus::STACK_START;
 use emu_6502::hardware::cpu::{Flag, CPU};
-use emu_6502::instruction::{Instruction, INSTRUCTIONS};
+use emu_6502::instruction::{get_instruction, AddressingMode, Instruction};
 use emu_6502::types::Addr;
 use sdl2::surface::Surface;
 use sdl2::{event::Event, keyboard::Keycode};
@@ -26,10 +28,10 @@ pub const WIDTH: i32 = 1600;
 pub const HEIGHT: i32 = 800;
 pub const CW: i32 = 12;
 pub const CH: i32 = 20;
-pub const L: i32 = CH as i32;
-pub const REGISTER_RIGHT: i32 = WIDTH as i32 - 25 * CW as i32;
-pub const STACK_RIGHT: i32 = WIDTH as i32 - 60 * CW as i32;
-pub const MEMORY_LEFT: i32 = 5 * CW as i32;
+pub const L: i32 = CH;
+pub const REGISTER_RIGHT: i32 = WIDTH - 30 * CW;
+pub const STACK_RIGHT: i32 = WIDTH - 60 * CW;
+pub const MEMORY_LEFT: i32 = 5 * CW;
 pub const PROMPT_X: i32 = 750;
 pub const PROMPT_Y: i32 = 100;
 pub const PROMPT_WIDTH: i32 = 500;
@@ -40,7 +42,7 @@ pub const TEXT_BOX_Y: i32 = PROMPT_HEIGHT - CH * 4;
 pub const TEXT_BOX_WIDTH: i32 = 200;
 pub const TEXT_BOX_HEIGHT: i32 = CH * 3;
 
-fn prompt<'a>(canvas: &'a mut Canvas<Window>, font: &mut Font) -> Result<(), String> {
+fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(), String> {
     let texture_creator = canvas.texture_creator();
 
     let mut surface = surface!(
@@ -66,13 +68,7 @@ fn prompt<'a>(canvas: &'a mut Canvas<Window>, font: &mut Font) -> Result<(), Str
         Color::RGBA(0, 0, 255, 255),
     )?;
 
-    blit_text(
-        "Specify start address of memory view:",
-        font,
-        &mut surface,
-        CW,
-        CH,
-    )?;
+    blit_text(txt, font, &mut surface, CW, CH)?;
 
     surface.fill_rect(
         rect!(TEXT_BOX_X, TEXT_BOX_Y, TEXT_BOX_WIDTH, TEXT_BOX_HEIGHT),
@@ -97,16 +93,17 @@ fn prompt<'a>(canvas: &'a mut Canvas<Window>, font: &mut Font) -> Result<(), Str
     Ok(())
 }
 
-pub fn run(cpu: &mut CPU) -> Result<(), String> {
+pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
     let (ctx, mut canvas, ttf) = new()?;
     canvas.set_draw_color(Color::RGBA(0, 0, 255, 255)); // BLUE
     canvas.clear();
     let mut font = ttf.load_font("/usr/share/fonts/TTF/JetBrainsMono-Bold.ttf", 128)?;
     let mut event_pump = ctx.event_pump()?;
     let mut refresh = true;
-    let mut memory_view_start = 0x8000;
     let mut input = false;
+    let mut memory_view_start = 0x7f00;
     let mut input_buffer = vec![];
+    let mut prompt_text: &str = "";
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -120,7 +117,7 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
                     keycode: Some(Keycode::Space),
                     ..
                 } => {
-                    cpu.exec();
+                    cpu.lock().unwrap().exec();
                     refresh = true
                 }
                 Event::KeyDown {
@@ -133,13 +130,10 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
                         if let Ok(_start) =
                             u16::from_str_radix(saddr.strip_prefix("0X").unwrap(), 16)
                         {
-                            dbg!(_start);
                             memory_view_start = _start;
                         }
-                    } else {
-                        if let Ok(_start) = u16::from_str_radix(&saddr, 16) {
-                            memory_view_start = _start;
-                        }
+                    } else if let Ok(_start) = u16::from_str_radix(&saddr, 16) {
+                        memory_view_start = _start;
                     }
                     input_buffer = vec![];
                     refresh = true;
@@ -160,24 +154,17 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
                     refresh = true;
                 }
                 Event::KeyDown {
-                    keycode: Some(Keycode::I),
-                    ..
-                } => {
-                    cpu.irq();
-                    refresh = true
-                }
-                Event::KeyDown {
                     keycode: Some(Keycode::N),
                     ..
                 } => {
-                    cpu.nmi_irq();
+                    cpu.lock().unwrap().nmi_irq();
                     refresh = true
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::R),
                     ..
                 } => {
-                    cpu.reset();
+                    cpu.lock().unwrap().reset();
                     refresh = true
                 }
                 Event::KeyDown {
@@ -185,6 +172,7 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
                     ..
                 } => {
                     input = true;
+                    prompt_text = "Specify start address of memory view:";
                     refresh = true;
                 }
                 _ => {}
@@ -195,9 +183,8 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
             canvas.set_draw_color(Color::RGBA(0, 0, 255, 255)); // BLUE
             canvas.clear();
             update(&cpu, &mut canvas, &mut font, memory_view_start)?;
-            refresh = false;
             if input {
-                prompt(&mut canvas, &mut font)?;
+                prompt(prompt_text, &mut canvas, &mut font)?;
                 if !input_buffer.is_empty() {
                     let mut surface = surface!(TEXT_BOX_WIDTH, TEXT_BOX_HEIGHT)?;
                     surface.fill_rect(None, Color::RGBA(0, 0, 255, 255))?;
@@ -218,7 +205,8 @@ pub fn run(cpu: &mut CPU) -> Result<(), String> {
                     )?;
                 }
             }
-            canvas.present()
+            canvas.present();
+            refresh = false;
         }
     }
 
@@ -242,7 +230,7 @@ pub fn new() -> Result<(Sdl, Canvas<Window>, Sdl2TtfContext), String> {
 }
 
 pub fn update(
-    cpu: &CPU,
+    cpu: &Arc<Mutex<CPU>>,
     canvas: &mut Canvas<Window>,
     font: &mut Font,
     view_memory_start: u16,
@@ -254,7 +242,7 @@ pub fn update(
     // Title
     blit_text(
         "6502 CPU",
-        &font,
+        font,
         &mut surface,
         WIDTH / 2 - 4,
         current_line * L,
@@ -266,45 +254,49 @@ pub fn update(
     font.set_style(sdl2::ttf::FontStyle::UNDERLINE);
     blit_text(
         "REGISTERS",
-        &font,
+        font,
         &mut surface,
-        REGISTER_RIGHT + 5 * CW as i32,
+        REGISTER_RIGHT + 5 * CW,
         current_line * L,
     )?;
     font.set_style(ttf::FontStyle::NORMAL);
 
     current_line += 2;
 
-    let (instruction, _): &(Instruction, _) = &INSTRUCTIONS[&cpu.read_memory(cpu.pc)];
-    let txt = format!("PC: {:#06x} -> {}", cpu.pc.0, instruction);
-    blit_text(&txt, &font, &mut surface, REGISTER_RIGHT, current_line * L)?;
+    let _cpu = cpu.lock().unwrap();
+
+    let (instruction, addressing_mode): (Instruction, AddressingMode) =
+        get_instruction(_cpu.read(_cpu.pc));
+    let arg = addressing_mode.get(&_cpu);
+    let txt = format!("PC: {:#06X} -> {} {}", _cpu.pc.0, instruction, arg);
+    blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
-    let txt = format!("A: {:#04x},  X: {:#04x}", cpu.a.0, cpu.x.0);
-    blit_text(&txt, &font, &mut surface, REGISTER_RIGHT, current_line * L)?;
+    let txt = format!("A: {:#04X},  X: {:#04X}", _cpu.a.0, _cpu.x.0);
+    blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
-    let txt = format!("Y: {:#04x}, SP: {:#04x}", cpu.y.0, cpu.sp.0);
-    blit_text(&txt, &font, &mut surface, REGISTER_RIGHT, current_line * L)?;
+    let txt = format!("Y: {:#04X}, SP: {:#04X}", _cpu.y.0, _cpu.sp.0);
+    blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
     current_line += 3;
 
     let txt = format!(
         "C: {}, Z: {}, I: {}, D: -",
-        cpu.ps & Flag::Carry,
-        cpu.ps & Flag::Zero,
-        cpu.ps & Flag::InterruptDisable,
+        _cpu.ps & Flag::Carry,
+        _cpu.ps & Flag::Zero,
+        _cpu.ps & Flag::InterruptDisable,
     );
-    blit_text(&txt, &font, &mut surface, REGISTER_RIGHT, current_line * L)?;
+    blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
     let txt = format!(
         "B: {}, V: {}, N: {}",
-        cpu.ps & Flag::BreakCmd,
-        cpu.ps & Flag::Overflow,
-        cpu.ps & Flag::Negative
+        _cpu.ps & Flag::BreakCmd,
+        _cpu.ps & Flag::Overflow,
+        _cpu.ps & Flag::Negative
     );
-    blit_text(&txt, &font, &mut surface, REGISTER_RIGHT, current_line * L)?;
+    blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
     // Stack
     current_line += 3;
@@ -312,9 +304,9 @@ pub fn update(
     font.set_style(sdl2::ttf::FontStyle::UNDERLINE);
     blit_text(
         "STACK",
-        &font,
+        font,
         &mut surface,
-        STACK_RIGHT + 25 * CW as i32,
+        STACK_RIGHT + 25 * CW,
         current_line * L,
     )?;
     font.set_style(ttf::FontStyle::NORMAL);
@@ -322,13 +314,7 @@ pub fn update(
 
     for byte in 0..16 {
         let data: Vec<String> = (0..16)
-            .into_iter()
-            .map(|b| {
-                format!(
-                    "{:02x}",
-                    cpu.read_memory(Addr::from(STACK_START + 8 * byte + b)).0
-                )
-            })
+            .map(|b| format!("{:02x}", _cpu.read(STACK_START + b + 16 * byte).0))
             .collect();
         blit_text(
             &format!(
@@ -336,7 +322,7 @@ pub fn update(
                 STACK_START.0 + (byte as u16) * 16,
                 data.join(" ")
             ),
-            &font,
+            font,
             &mut surface,
             STACK_RIGHT,
             L * (current_line + byte as i32),
@@ -348,9 +334,9 @@ pub fn update(
     font.set_style(sdl2::ttf::FontStyle::UNDERLINE);
     blit_text(
         "BUS",
-        &font,
+        font,
         &mut surface,
-        MEMORY_LEFT + 25 * CW as i32,
+        MEMORY_LEFT + 25 * CW,
         current_line * L,
     )?;
     font.set_style(ttf::FontStyle::NORMAL);
@@ -358,16 +344,15 @@ pub fn update(
 
     for byte in 0..16 {
         let data: Vec<String> = (0..16)
-            .into_iter()
-            .map(|b| format!("{:02x}", cpu.read_memory(Addr::from(8 * byte + b)).0))
+            .map(|b| format!("{:02x}", _cpu.read(Addr::from(b + 16 * byte)).0))
             .collect();
 
         blit_text(
-            &format!("${:04x}: {}", byte * 16, data.join(" ")),
-            &font,
+            &format!("${:04X}: {}", byte * 16, data.join(" ")),
+            font,
             &mut surface,
             MEMORY_LEFT,
-            L * (current_line + byte as i32),
+            L * (current_line + byte),
         )?;
     }
     current_line += 16;
@@ -375,22 +360,16 @@ pub fn update(
     current_line += 1;
     for byte in 0..16 {
         let data: Vec<String> = (0..16)
-            .into_iter()
             .map(|b| {
                 format!(
                     "{:02x}",
-                    cpu.read_memory(Addr::from(view_memory_start + 8 * byte + b))
-                        .0
+                    _cpu.read(Addr::from(view_memory_start + b + 16 * byte)).0
                 )
             })
             .collect();
         blit_text(
-            &format!(
-                "${:04x}: {}",
-                view_memory_start + byte * 16,
-                data.join(" ")
-            ),
-            &font,
+            &format!("${:04X}: {}", view_memory_start + 16 * byte, data.join(" ")),
+            font,
             &mut surface,
             MEMORY_LEFT,
             L * (current_line + byte as i32),
@@ -406,9 +385,9 @@ pub fn update(
     Ok(())
 }
 
-fn blit_text<'a>(
+fn blit_text(
     txt: &str,
-    font: &'a Font,
+    font: &Font,
     dst: &mut Surface,
     x: i32,
     y: i32,

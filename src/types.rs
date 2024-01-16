@@ -7,8 +7,10 @@ use crate::hardware::cpu::Flag;
 
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub struct Byte(pub u8);
-#[derive(Debug, Clone, Copy)]
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Addr(pub u16);
+
 #[derive(PartialEq, PartialOrd)]
 pub struct Bit(pub bool);
 
@@ -103,7 +105,7 @@ impl Add<Byte> for Bit {
 impl BitAnd<Flag> for Byte {
     type Output = Bit;
     fn bitand(self, rhs: Flag) -> Self::Output {
-        Bit((self.0 & ((1 << rhs as u8))) != 0)
+        Bit((self.0 & (1 << rhs as u8)) != 0)
     }
 }
 

@@ -36,56 +36,69 @@ pub enum AddressingMode {
 }
 
 impl AddressingMode {
-    pub fn get(self, cpu: &mut CPU) -> InstructionArgument {
+    pub fn get(self, cpu: &CPU) -> InstructionArgument {
         match self {
-            AddressingMode::Immediate => InstructionArgument::Immediate(cpu.next_instruction()),
+            AddressingMode::Immediate => InstructionArgument::Immediate(cpu.read(cpu.pc + 1)),
             AddressingMode::ZeroPage => {
-                InstructionArgument::Address(Addr::from(cpu.next_instruction()))
+                InstructionArgument::Address(Addr::from(cpu.read(cpu.pc + 1)))
             }
             AddressingMode::ZeroPageX => {
-                InstructionArgument::Address(Addr::from(cpu.next_instruction() + cpu.x))
+                InstructionArgument::Address(Addr::from(cpu.read(cpu.pc + 1) + cpu.x))
             }
             AddressingMode::ZeroPageY => {
-                InstructionArgument::Address(Addr::from(cpu.next_instruction() + cpu.y))
+                InstructionArgument::Address(Addr::from(cpu.read(cpu.pc + 1) + cpu.y))
             }
             AddressingMode::Absolute => {
-                let low_addr = cpu.next_instruction();
-                let hi_addr = cpu.next_instruction();
+                let low_addr = cpu.read(cpu.pc + 1);
+                let hi_addr = cpu.read(cpu.pc + 2);
                 InstructionArgument::Address(Addr::from(hi_addr) << 8 | low_addr)
             }
             AddressingMode::AbsoluteX => {
-                let low_addr = cpu.next_instruction();
-                let hi_addr = cpu.next_instruction();
+                let low_addr = cpu.read(cpu.pc + 1);
+                let hi_addr = cpu.read(cpu.pc + 2);
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.x)
             }
             AddressingMode::AbsoluteY => {
-                let low_addr = cpu.next_instruction();
-                let hi_addr = cpu.next_instruction();
+                let low_addr = cpu.read(cpu.pc + 1);
+                let hi_addr = cpu.read(cpu.pc + 2);
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
             }
             AddressingMode::Indirect => {
-                let low_addr = cpu.next_instruction();
-                let hi_addr = cpu.next_instruction();
+                let low_addr = cpu.read(cpu.pc + 1);
+                let hi_addr = cpu.read(cpu.pc + 2);
                 let _addr = ((Addr::from(hi_addr) << 8) | low_addr) + cpu.y;
                 InstructionArgument::Address(
-                    Addr::from((cpu.read_memory(_addr)) << 8) | cpu.read_memory(_addr + 1),
+                    Addr::from((cpu.read(_addr)) << 8) | cpu.read(_addr + 1),
                 )
             }
             AddressingMode::IndirectX => {
-                let _addr = cpu.next_instruction() + cpu.x;
-                let low_addr = cpu.read_memory(_addr.into());
-                let hi_addr = cpu.read_memory((_addr + 1).into());
-                InstructionArgument::Address(Addr::from(hi_addr << 8) | low_addr)
+                let _lo = cpu.read(cpu.pc + 1) + cpu.x;
+                let _hi = cpu.read(cpu.pc + 2);
+                InstructionArgument::Address(Addr::from(_hi << 8) | _lo)
             }
             AddressingMode::IndirectY => {
-                let _addr = cpu.next_instruction();
-                let low_addr = cpu.read_memory(_addr.into());
-                let hi_addr = cpu.read_memory((_addr + 1).into());
+                let _addr = cpu.read(cpu.pc + 1);
+                dbg!(_addr, cpu.y);
+                let low_addr = cpu.read(_addr.into());
+                let hi_addr = cpu.read((_addr + 1).into());
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
             }
-            AddressingMode::Relative => InstructionArgument::Offset(cpu.next_instruction()),
+            AddressingMode::Relative => InstructionArgument::Offset(cpu.read(cpu.pc + 1)),
             AddressingMode::Implied => InstructionArgument::Implied,
         }
+    }
+}
+
+impl Display for InstructionArgument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let txt = match self {
+            InstructionArgument::Implied => "*".to_string(),
+            InstructionArgument::Offset(byte) => format!("%{:#04X}", byte.0),
+            InstructionArgument::Address(addr) => format!("${:#06X}", addr.0),
+            InstructionArgument::Immediate(byte) => format!("#{:#04X}", byte.0),
+        };
+
+        write!(f, "{txt}")
     }
 }
 
@@ -148,9 +161,9 @@ impl Display for Instruction {
 }
 
 #[rustfmt::skip]
-impl Into<Instruction> for &str {
-    fn into(self) -> Instruction {
-        match self {
+impl From<&str> for Instruction {
+    fn from(val: &str) -> Self {
+        match val {
             "ADC" => Instruction::ADC, "AND" => Instruction::AND,
             "ASL" => Instruction::ASL, "BCC" => Instruction::BCC,
             "BCS" => Instruction::BCS, "BEQ" => Instruction::BEQ,
@@ -185,7 +198,7 @@ impl Into<Instruction> for &str {
 }
 
 impl Instruction {
-    pub fn exec(&self, arg: InstructionArgument, cpu: &mut CPU) {
+    pub fn exec(&self, arg: InstructionArgument, cpu: &mut CPU) -> bool {
         match self {
             Instruction::LDA => load_store::lda(arg, cpu),
             Instruction::LDX => load_store::ldx(arg, cpu),
@@ -194,71 +207,84 @@ impl Instruction {
                 let InstructionArgument::Address(addr) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
-                cpu.write_memory(addr, cpu.a)
+                cpu.write(addr, cpu.a);
+                true
             }
             Instruction::STX => {
                 let InstructionArgument::Address(addr) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
-                cpu.write_memory(addr, cpu.x);
+                cpu.write(addr, cpu.x);
+                true
             }
             Instruction::STY => {
                 let InstructionArgument::Address(addr) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
-                cpu.write_memory(addr, cpu.y);
+                cpu.write(addr, cpu.y);
+                true
             }
             Instruction::TAX => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.x = cpu.a;
                 cpu.set(Flag::Negative, cpu.x & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.x == 0));
+                true
             }
             Instruction::TAY => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.y = cpu.a;
                 cpu.set(Flag::Negative, cpu.y & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.y == 0));
+                true
             }
             Instruction::TXA => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.a = cpu.x;
                 cpu.set(Flag::Negative, cpu.a & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.a == 0));
+                true
             }
             Instruction::TYA => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.a = cpu.y;
                 cpu.set(Flag::Negative, cpu.a & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.a == 0));
+                true
             }
             Instruction::TSX => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.x = cpu.sp;
                 cpu.set(Flag::Negative, cpu.x & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.x == 0));
+                true
             }
             Instruction::TXS => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.sp = cpu.x;
+                true
             }
             Instruction::PHA => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.push_stack(cpu.a);
+                true
             }
             Instruction::PHP => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.push_stack(cpu.ps);
+                true
             }
             Instruction::PLA => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.a = cpu.pop_stack();
                 cpu.set(Flag::Negative, cpu.a & Flag::Negative);
                 cpu.set(Flag::Zero, Bit(cpu.a == 0));
+                true
             }
             Instruction::PLP => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.ps = cpu.pop_stack();
+                true
             }
 
             Instruction::AND => logical::and(arg, cpu),
@@ -290,55 +316,85 @@ impl Instruction {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.pc = addr;
+
+                false
             }
             Instruction::JSR => {
                 let InstructionArgument::Address(addr) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from((cpu.pc & 0xff) + 1));
+                cpu.push_stack(Byte::from((cpu.pc & 0x00ff) + 3));
                 cpu.pc = addr;
+
+                false
             }
             Instruction::RTS => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 let low_addr = cpu.pop_stack();
                 let hi_addr = cpu.pop_stack();
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
+
+                false
             }
 
             // Branches
             Instruction::BCC => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
 
                 if !cpu.is_set(Flag::Carry) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BCS => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Carry) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BEQ => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Zero) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BMI => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Negative) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BNE => {
                 let InstructionArgument::Offset(offset) = arg else {
@@ -346,111 +402,161 @@ impl Instruction {
                 };
                 if !cpu.is_set(Flag::Zero) {
                     if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1);
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
                     }
+                    return false;
                 }
+                true
             }
             Instruction::BPL => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if !cpu.is_set(Flag::Negative) {
-                    cpu.pc += *addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BVC => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if !cpu.is_set(Flag::Overflow) {
-                    cpu.pc += *addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
             Instruction::BVS => {
-                let InstructionArgument::Address(addr) = arg else {
+                let InstructionArgument::Offset(offset) = arg else {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 if cpu.is_set(Flag::Overflow) {
-                    cpu.pc = addr;
+                    if (offset & Flag::Negative).0 {
+                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
+                    } else {
+                        cpu.pc = cpu.pc + offset + 2;
+                    }
+                    return false;
                 }
+                true
             }
 
             // Status Flag Changes
-            Instruction::CLC => cpu.set(Flag::Carry, Bit(false)),
-            Instruction::CLD => cpu.set(Flag::DecimalMode, Bit(false)),
-            Instruction::CLI => cpu.set(Flag::InterruptDisable, Bit(false)),
-            Instruction::CLV => cpu.set(Flag::Overflow, Bit(false)),
-            Instruction::SEC => cpu.set(Flag::Carry, Bit(true)),
-            Instruction::SED => cpu.set(Flag::DecimalMode, Bit(true)),
-            Instruction::SEI => cpu.set(Flag::InterruptDisable, Bit(true)),
+            Instruction::CLC => {
+                cpu.set(Flag::Carry, Bit(false));
+                true
+            }
+            Instruction::CLD => {
+                cpu.set(Flag::DecimalMode, Bit(false));
+                true
+            }
+            Instruction::CLI => {
+                cpu.set(Flag::InterruptDisable, Bit(false));
+                true
+            }
+            Instruction::CLV => {
+                cpu.set(Flag::Overflow, Bit(false));
+                true
+            }
+            Instruction::SEC => {
+                cpu.set(Flag::Carry, Bit(true));
+                true
+            }
+            Instruction::SED => {
+                cpu.set(Flag::DecimalMode, Bit(true));
+                true
+            }
+            Instruction::SEI => {
+                cpu.set(Flag::InterruptDisable, Bit(true));
+                true
+            }
 
             // System Functions
             Instruction::BRK => {
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
                 cpu.push_stack(Byte::from(cpu.pc & 0xff));
                 cpu.push_stack(cpu.ps);
-                let low_addr = cpu.read_memory(Addr::from(0xfffe));
-                let hi_addr = cpu.read_memory(Addr::from(0xffff));
+                let low_addr = cpu.read(Addr::from(0xfffe));
+                let hi_addr = cpu.read(Addr::from(0xffff));
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
                 cpu.set(Flag::BreakCmd, Bit(true));
+                false
             }
-            Instruction::NOP => {}
+            Instruction::NOP => true,
             Instruction::RTI => {
                 cpu.ps = cpu.pop_stack();
                 cpu.set(Flag::BreakCmd, Bit(false));
-                let low_addr = cpu.pop_stack();
                 let hi_addr = cpu.pop_stack();
+                let low_addr = cpu.pop_stack();
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
+                cpu.unpend_irq();
+                false
             }
-            Instruction::XXX => cpu.halt(),
+            Instruction::XXX => {
+                cpu.halt();
+                false
+            }
         }
     }
 
     pub fn valid_address_mode(&self, addressing_mode: AddressingMode) -> bool {
         match self {
-            Instruction::ADC => match addressing_mode {
-                AddressingMode::Immediate => true,
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                _ => false,
-            },
-            Instruction::AND => match addressing_mode {
-                AddressingMode::Immediate => true,
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::Indirect => true,
-                _ => false,
-            },
+            Instruction::ADC => matches!(
+                addressing_mode,
+                AddressingMode::Immediate
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+            ),
 
-            Instruction::ASL => match addressing_mode {
-                AddressingMode::Implied => true,
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::AND => matches!(
+                addressing_mode,
+                AddressingMode::Immediate
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::Indirect
+            ),
+
+            Instruction::ASL => matches!(
+                addressing_mode,
+                AddressingMode::Implied
+                    | AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+            ),
 
             Instruction::TSX => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::CMP => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::CMP => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
             Instruction::RTS => matches!(addressing_mode, AddressingMode::Implied),
 
@@ -458,47 +564,47 @@ impl Instruction {
 
             Instruction::DEY => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::STA => match addressing_mode {
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::STA => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
             Instruction::PHA => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::LDA => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::LDA => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
-            Instruction::LSR => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::LSR => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+            ),
 
-            Instruction::ORA => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::ORA => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
             Instruction::SEC => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::SED => matches!(addressing_mode, AddressingMode::Implied),
@@ -507,53 +613,51 @@ impl Instruction {
             Instruction::PHP => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::SEI => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::STX => match addressing_mode {
-                AddressingMode::ZeroPageY => true,
-                AddressingMode::Absolute => true,
-                _ => false,
-            },
+            Instruction::STX => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPageY | AddressingMode::Absolute
+            ),
 
-            Instruction::STY => match addressing_mode {
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                _ => false,
-            },
+            Instruction::STY => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPageX | AddressingMode::Absolute
+            ),
 
-            Instruction::LDX => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageY => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteY => true,
-                _ => false,
-            },
+            Instruction::LDX => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageY
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteY
+            ),
 
-            Instruction::LDY => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::LDY => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+            ),
 
-            Instruction::ROL => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::ROL => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+            ),
 
             Instruction::BPL => matches!(addressing_mode, AddressingMode::Relative),
             Instruction::PLP => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::CLC => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::ROR => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::ROR => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+            ),
 
             Instruction::CLD => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::BRK => matches!(addressing_mode, AddressingMode::Implied),
@@ -565,16 +669,16 @@ impl Instruction {
             Instruction::NOP => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::TAY => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::EOR => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::EOR => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
             Instruction::CLV => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::BCS => matches!(addressing_mode, AddressingMode::Relative),
@@ -584,51 +688,42 @@ impl Instruction {
             Instruction::BEQ => matches!(addressing_mode, AddressingMode::Relative),
             Instruction::TXS => matches!(addressing_mode, AddressingMode::Implied),
 
-            Instruction::SBC => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                AddressingMode::AbsoluteY => true,
-                AddressingMode::IndirectX => true,
-                AddressingMode::IndirectY => true,
-                _ => false,
-            },
+            Instruction::SBC => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage
+                    | AddressingMode::ZeroPageX
+                    | AddressingMode::Absolute
+                    | AddressingMode::AbsoluteX
+                    | AddressingMode::AbsoluteY
+                    | AddressingMode::IndirectX
+                    | AddressingMode::IndirectY
+            ),
 
-            Instruction::CPX => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::Absolute => true,
-                _ => false,
-            },
+            Instruction::CPX => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage | AddressingMode::Absolute
+            ),
 
-            Instruction::CPY => match addressing_mode {
-                AddressingMode::ZeroPage => true,
-                AddressingMode::Absolute => true,
-                _ => false,
-            },
+            Instruction::CPY => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPage | AddressingMode::Absolute
+            ),
 
-            Instruction::BIT => match addressing_mode {
-                AddressingMode::Absolute => true,
-                _ => false,
-            },
+            Instruction::BIT => matches!(addressing_mode, AddressingMode::Absolute),
 
             Instruction::BMI => matches!(addressing_mode, AddressingMode::Relative),
 
             Instruction::JSR => matches!(addressing_mode, AddressingMode::Absolute),
 
-            Instruction::INC => match addressing_mode {
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::INC => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPageX | AddressingMode::Absolute | AddressingMode::AbsoluteX
+            ),
 
-            Instruction::DEC => match addressing_mode {
-                AddressingMode::ZeroPageX => true,
-                AddressingMode::Absolute => true,
-                AddressingMode::AbsoluteX => true,
-                _ => false,
-            },
+            Instruction::DEC => matches!(
+                addressing_mode,
+                AddressingMode::ZeroPageX | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY
+            ),
 
             Instruction::INX => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::INY => matches!(addressing_mode, AddressingMode::Implied),
@@ -636,6 +731,14 @@ impl Instruction {
             Instruction::TYA => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::XXX => matches!(addressing_mode, AddressingMode::Implied),
         }
+    }
+}
+
+pub fn get_instruction(op_code: Byte) -> (Instruction, AddressingMode) {
+    if INSTRUCTIONS.contains_key(&op_code) {
+        INSTRUCTIONS[&op_code.0]
+    } else {
+        (Instruction::NOP, AddressingMode::Implied)
     }
 }
 
@@ -736,7 +839,7 @@ pub static INSTRUCTIONS: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! 
     0xAEu8 => (Instruction::LDX, AddressingMode::Absolute),
     0xBEu8 => (Instruction::LDX, AddressingMode::AbsoluteY),
 
-    0xA0u8 => (Instruction::LDY, AddressingMode::Implied),
+    0xA0u8 => (Instruction::LDY, AddressingMode::Immediate),
     0xA4u8 => (Instruction::LDY, AddressingMode::ZeroPage),
     0xB4u8 => (Instruction::LDY, AddressingMode::ZeroPageX),
     0xACu8 => (Instruction::LDY, AddressingMode::Absolute),

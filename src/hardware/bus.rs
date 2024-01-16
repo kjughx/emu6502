@@ -1,14 +1,15 @@
 use crate::types::{Addr, Byte};
-use std::path::Path;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-pub const MEMORY_SIZE: usize = 1024 * 64;
 pub const STACK_START: Addr = Addr(0x100);
 pub const STACK_END: Addr = Addr(0x01ff);
 pub const STACK_SIZE: usize = 0xff;
 
-#[derive(Debug)]
+/// Encapsulates the 16-bit wide bus
 pub struct Bus {
-    pub data: [Byte; MEMORY_SIZE],
+    devices: Vec<Arc<Mutex<dyn Device>>>,
+    indices: HashMap<u16, usize>,
 }
 
 impl Default for Bus {
@@ -17,40 +18,62 @@ impl Default for Bus {
     }
 }
 
+/// Trait for devices on `Bus`
+pub trait Device: Send + Sync {
+    /// Someone writes `data` to `addr` belonging to this device
+    fn rx(&mut self, _addr: Addr, _data: Byte) {}
+
+    /// Someone reads from `addr` belonging to this device
+    fn tx(&mut self, addr: Addr) -> Byte;
+}
+
 impl Bus {
     pub fn new() -> Self {
-        let mut data = [Byte(0xff); MEMORY_SIZE];
-        data[0x100..0x01ff].copy_from_slice(&[Byte(0xff); STACK_SIZE]);
-        Self { data }
-    }
-
-    /// Access memory at address @addr
-    pub fn read(&self, addr: Addr) -> Byte {
-        self.data[addr.0 as usize]
-    }
-    /// Write @data to memory at address @addr
-    pub fn write(&mut self, addr: Addr, data: Byte) {
-        self.data[addr.0 as usize] = data;
-    }
-
-    pub fn init(&mut self, mut addr: Addr, data: Vec<u8>) {
-        for byte in data {
-            self.data[addr.0 as usize] = Byte(byte);
-            addr.0 += 1;
+        Self {
+            devices: vec![],
+            indices: HashMap::new(),
         }
     }
 
-    pub fn load_file(
+    pub fn register(
         &mut self,
-        mut start: Addr,
-        path: &Path,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let data = std::fs::read(path)?;
-        for byte in data {
-            self.data[start.0 as usize] = Byte(byte);
-            start += 1;
+        dev: Arc<Mutex<dyn Device>>,
+        start: Addr,
+        end: Addr,
+    ) -> Result<(), String> {
+        for key in self.indices.keys() {
+            if *key >= start.0 && *key < end.0 {
+                return Err("Overlaping addresses".to_string())?;
+            }
         }
+
+        self.devices.push(dev);
+        let len = self.devices.len();
+        for _addr in start.0..=end.0 {
+            self.indices.insert(_addr, len - 1);
+        }
+        println!(
+            "Registering device at [{:#06X}, {:#06X}]",
+            start.0,
+            end.0
+        );
 
         Ok(())
+    }
+
+    /// Read on bus from address `addr`
+    pub fn read(&self, addr: Addr) -> Byte {
+        if !self.indices.contains_key(&addr.0) {
+            println!("Nothing registered at {:#06X}", addr.0);
+            return Byte(0x00);
+        }
+        let dev = &self.devices[self.indices[&addr.0]];
+        dev.lock().unwrap().tx(addr)
+    }
+
+    /// Write on bus `data` to address `addr`
+    pub fn write(&mut self, addr: Addr, data: Byte) {
+        let dev = &self.devices[self.indices[&addr.0]];
+        dev.lock().unwrap().rx(addr, data);
     }
 }

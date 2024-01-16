@@ -1,0 +1,41 @@
+use crate::types::{Addr, Byte};
+use std::path::Path;
+
+use super::bus::Device;
+
+pub const ROM_SIZE: Addr = Addr(0x80ff);
+pub const ROM_START: Addr = Addr(0x7f00);
+
+#[derive(Clone)]
+pub struct Rom {
+    data: [Byte; (ROM_SIZE.0 + 1) as usize],
+}
+
+impl Rom {
+    pub fn new(file: Option<String>) -> Rom {
+        let mut data = [Byte(0); (ROM_SIZE.0 + 1) as usize];
+        if let Some(file) = file {
+            let _data = std::fs::read(Path::new(&file)).unwrap();
+            for (i, byte) in _data[..((ROM_SIZE.0 - 1) as usize)].iter().enumerate() {
+                data[i] = Byte(*byte);
+            }
+        }
+
+        Self {
+            data
+        }
+    }
+}
+
+impl Device for Rom {
+    #[allow(clippy::absurd_extreme_comparisons)]
+    fn rx(&mut self, addr: Addr, data: Byte) {
+        assert!(addr.0 <= ROM_START.0 + ROM_SIZE.0, "ROM: Outside memory region {:#06X}", addr.0);
+        self.data[(addr.0 - ROM_START.0) as usize] = data;
+    }
+    #[allow(clippy::absurd_extreme_comparisons)]
+    fn tx(&mut self, addr: Addr) -> Byte {
+        assert!(addr.0 <= ROM_START.0 + ROM_SIZE.0, "ROM: Outside memory region {:#06X}", addr.0);
+        self.data[(addr.0 - ROM_START.0) as usize]
+    }
+}
