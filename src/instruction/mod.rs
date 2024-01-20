@@ -1,14 +1,19 @@
-pub mod arithmetic;
-pub mod increment_decrement;
-pub mod load_store;
-pub mod logical;
-pub mod shift;
+mod arithmetic;
+mod branch;
+mod flag;
+mod increment_decrement;
+mod jump_call;
+mod load_store;
+mod logical;
+mod shift;
+mod stack_op;
+mod system_fn;
 
 use std::fmt::Display;
 
 use phf::phf_map;
 
-use crate::hardware::cpu::{Flag, CPU};
+use crate::hardware::cpu::CPU;
 use crate::types::*;
 
 #[derive(Debug)]
@@ -203,91 +208,20 @@ impl Instruction {
             Instruction::LDA => load_store::lda(arg, cpu),
             Instruction::LDX => load_store::ldx(arg, cpu),
             Instruction::LDY => load_store::ldy(arg, cpu),
-            Instruction::STA => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                cpu.write(addr, cpu.a);
-                true
-            }
-            Instruction::STX => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                cpu.write(addr, cpu.x);
-                true
-            }
-            Instruction::STY => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                cpu.write(addr, cpu.y);
-                true
-            }
-            Instruction::TAX => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.x = cpu.a;
-                cpu.set(Flag::Negative, cpu.x & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.x == 0));
-                true
-            }
-            Instruction::TAY => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.y = cpu.a;
-                cpu.set(Flag::Negative, cpu.y & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.y == 0));
-                true
-            }
-            Instruction::TXA => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.a = cpu.x;
-                cpu.set(Flag::Negative, cpu.a & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.a == 0));
-                true
-            }
-            Instruction::TYA => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.a = cpu.y;
-                cpu.set(Flag::Negative, cpu.a & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.a == 0));
-                true
-            }
-            Instruction::TSX => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.x = cpu.sp;
-                cpu.set(Flag::Negative, cpu.x & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.x == 0));
-                true
-            }
-            Instruction::TXS => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.sp = cpu.x;
-                true
-            }
-            Instruction::PHA => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.push_stack(cpu.a);
-                true
-            }
-            Instruction::PHP => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.push_stack(cpu.ps | Flag::Break | Flag::Reserved);
-                true
-            }
-            Instruction::PLA => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.a = cpu.pop_stack();
-                cpu.set(Flag::Negative, cpu.a & Flag::Negative);
-                cpu.set(Flag::Zero, Bit(cpu.a == 0));
-                true
-            }
-            Instruction::PLP => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.ps = cpu.pop_stack();
-                cpu.ps = cpu.ps | Flag::Reserved;
-                cpu.ps = cpu.ps & !Flag::Break;
-                true
-            }
+            Instruction::STA => load_store::sta(arg, cpu),
+            Instruction::STX => load_store::stx(arg, cpu),
+            Instruction::STY => load_store::sty(arg, cpu),
+
+            Instruction::TAX => stack_op::tax(arg, cpu),
+            Instruction::TAY => stack_op::tay(arg, cpu),
+            Instruction::TXA => stack_op::txa(arg, cpu),
+            Instruction::TYA => stack_op::tya(arg, cpu),
+            Instruction::TSX => stack_op::tsx(arg, cpu),
+            Instruction::TXS => stack_op::txs(arg, cpu),
+            Instruction::PHA => stack_op::pha(arg, cpu),
+            Instruction::PHP => stack_op::php(arg, cpu),
+            Instruction::PLA => stack_op::pla(arg, cpu),
+            Instruction::PLP => stack_op::plp(arg, cpu),
 
             Instruction::AND => logical::and(arg, cpu),
             Instruction::EOR => logical::eor(arg, cpu),
@@ -312,198 +246,30 @@ impl Instruction {
             Instruction::ROL => shift::rol(arg, cpu),
             Instruction::ROR => shift::ror(arg, cpu),
 
-            // Jumps & Calls
-            Instruction::JMP => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                cpu.pc = addr;
+            Instruction::JMP => jump_call::jmp(arg, cpu),
+            Instruction::JSR => jump_call::jsr(arg, cpu),
+            Instruction::RTS => jump_call::rts(arg, cpu),
 
-                false
-            }
-            Instruction::JSR => {
-                let InstructionArgument::Address(addr) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from((cpu.pc & 0x00ff) + 2));
-                cpu.pc = addr;
+            Instruction::BCC => branch::bcc(arg, cpu),
+            Instruction::BCS => branch::bcs(arg, cpu),
+            Instruction::BEQ => branch::beq(arg, cpu),
+            Instruction::BMI => branch::bmi(arg, cpu),
+            Instruction::BNE => branch::bne(arg, cpu),
+            Instruction::BPL => branch::bpl(arg, cpu),
+            Instruction::BVC => branch::bvc(arg, cpu),
+            Instruction::BVS => branch::bvs(arg, cpu),
 
-                false
-            }
-            Instruction::RTS => {
-                assert!(matches!(arg, InstructionArgument::Implied));
-                let low_addr = cpu.pop_stack();
-                let hi_addr = cpu.pop_stack();
-                cpu.pc = (Addr::from(hi_addr) << 8) | low_addr + 1;
+            Instruction::CLC => flag::clc(arg, cpu),
+            Instruction::CLD => flag::cld(arg, cpu),
+            Instruction::CLI => flag::cli(arg, cpu),
+            Instruction::CLV => flag::clv(arg, cpu),
+            Instruction::SEC => flag::sec(arg, cpu),
+            Instruction::SED => flag::sed(arg, cpu),
+            Instruction::SEI => flag::sei(arg, cpu),
 
-                false
-            }
-
-            // Branches
-            Instruction::BCC => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-
-                if !cpu.is_set(Flag::Carry) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BCS => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if cpu.is_set(Flag::Carry) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BEQ => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if cpu.is_set(Flag::Zero) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BMI => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if cpu.is_set(Flag::Negative) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BNE => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if !cpu.is_set(Flag::Zero) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BPL => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if !cpu.is_set(Flag::Negative) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BVC => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if !cpu.is_set(Flag::Overflow) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-            Instruction::BVS => {
-                let InstructionArgument::Offset(offset) = arg else {
-                    unreachable!("Illegal addressing mode: {:?}", arg);
-                };
-                if cpu.is_set(Flag::Overflow) {
-                    if (offset & Flag::Negative).0 {
-                        cpu.pc = cpu.pc - (!*offset + 1) + 2;
-                    } else {
-                        cpu.pc = cpu.pc + offset + 2;
-                    }
-                    return false;
-                }
-                true
-            }
-
-            // Status Flag Changes
-            Instruction::CLC => {
-                cpu.set(Flag::Carry, Bit(false));
-                true
-            }
-            Instruction::CLD => {
-                cpu.set(Flag::DecimalMode, Bit(false));
-                true
-            }
-            Instruction::CLI => {
-                cpu.set(Flag::InterruptDisable, Bit(false));
-                true
-            }
-            Instruction::CLV => {
-                cpu.set(Flag::Overflow, Bit(false));
-                true
-            }
-            Instruction::SEC => {
-                cpu.set(Flag::Carry, Bit(true));
-                true
-            }
-            Instruction::SED => {
-                cpu.set(Flag::DecimalMode, Bit(true));
-                true
-            }
-            Instruction::SEI => {
-                cpu.set(Flag::InterruptDisable, Bit(true));
-                true
-            }
-
-            // System Functions
-            Instruction::BRK => {
-                cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from(cpu.pc & 0xff) + 2);
-                cpu.push_stack(cpu.ps | Flag::Break);
-                let low_addr = cpu.read(Addr::from(0xfffe));
-                let hi_addr = cpu.read(Addr::from(0xffff));
-                cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
-                cpu.set(Flag::InterruptDisable, Bit(true));
-                false
-            }
+            Instruction::BRK => system_fn::brk(arg, cpu),
             Instruction::NOP => true,
-            Instruction::RTI => {
-                cpu.ps = cpu.pop_stack() & !Flag::Break | Flag::Reserved;
-                let low_addr = cpu.pop_stack();
-                let hi_addr = cpu.pop_stack();
-                cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
-                false
-            }
+            Instruction::RTI => system_fn::rti(arg, cpu),
             Instruction::XXX => {
                 cpu.halt(Some("Illegal Instruction"));
                 false
@@ -740,15 +506,13 @@ impl Instruction {
 pub fn get_instruction(op_code: Byte) -> (Instruction, AddressingMode) {
     if INSTRUCTIONS.contains_key(&op_code) {
         INSTRUCTIONS[&op_code.0]
+    } else if matches!(
+        op_code.0,
+        0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2
+    ) {
+        (Instruction::XXX, AddressingMode::Implied)
     } else {
-        if matches!(
-            op_code.0,
-            0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2
-        ) {
-            (Instruction::XXX, AddressingMode::Implied)
-        } else {
-            (Instruction::NOP, AddressingMode::Implied)
-        }
+        (Instruction::NOP, AddressingMode::Implied)
     }
 }
 

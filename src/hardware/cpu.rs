@@ -79,7 +79,7 @@ impl CPU {
             self.ps &= !Byte(1 << (flag as u8));
         }
 
-        self.ps = self.ps | Flag::Reserved; // Always set
+        self.ps |= Flag::Reserved; // Always set
     }
 
     /// Push `data` onto the stack
@@ -231,7 +231,7 @@ impl CPU {
             std::process::exit(0);
         }
 
-        return true;
+        true
     }
 }
 

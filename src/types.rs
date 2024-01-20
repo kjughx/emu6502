@@ -8,7 +8,7 @@ use crate::hardware::cpu::Flag;
 #[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
 pub struct Byte(pub u8);
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Addr(pub u16);
 
 #[derive(PartialEq, PartialOrd, Debug)]
@@ -17,6 +17,13 @@ pub struct Bit(pub bool);
 impl core::fmt::Display for Bit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0 as u8)
+    }
+}
+
+impl Add<Addr> for Addr {
+    type Output = Addr;
+    fn add(self, rhs: Addr) -> Self::Output {
+        Addr(self.0 + rhs.0)
     }
 }
 
@@ -72,6 +79,12 @@ impl BitAnd<Byte> for Byte {
 impl BitOrAssign<Byte> for Byte {
     fn bitor_assign(&mut self, rhs: Byte) {
         *self = Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign<Flag> for Byte {
+    fn bitor_assign(&mut self, rhs: Flag) {
+        *self = Byte(self.0) | (1 << rhs as u8)
     }
 }
 

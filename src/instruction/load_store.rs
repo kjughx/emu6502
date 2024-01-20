@@ -6,7 +6,7 @@ pub fn lda(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg)
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
     cpu.a = val;
     cpu.set(Flag::Negative, cpu.a & Flag::Negative);
@@ -19,7 +19,7 @@ pub fn ldx(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg)
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
     cpu.x = val;
     cpu.set(Flag::Negative, cpu.x & Flag::Negative);
@@ -28,15 +28,39 @@ pub fn ldx(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     true
 }
 
-pub fn ldy(arg: InstructionArgument, cpu: &mut CPU) -> bool{
+pub fn ldy(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let val = match arg {
         InstructionArgument::Immediate(v) => v,
         InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg)
+        _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
     cpu.y = val;
     cpu.set(Flag::Negative, cpu.y & Flag::Negative);
     cpu.set(Flag::Zero, Bit(cpu.y == 0));
 
+    true
+}
+
+pub fn sta(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    let InstructionArgument::Address(addr) = arg else {
+        unreachable!("Illegal addressing mode: {:?}", arg);
+    };
+    cpu.write(addr, cpu.a);
+    true
+}
+
+pub fn stx(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    let InstructionArgument::Address(addr) = arg else {
+        unreachable!("Illegal addressing mode: {:?}", arg);
+    };
+    cpu.write(addr, cpu.x);
+    true
+}
+
+pub fn sty(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    let InstructionArgument::Address(addr) = arg else {
+        unreachable!("Illegal addressing mode: {:?}", arg);
+    };
+    cpu.write(addr, cpu.y);
     true
 }

@@ -47,7 +47,6 @@ pub fn sbc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     cpu.set(Flag::Zero, Bit(sub == 0));
     cpu.set(Flag::Negative, sub & Flag::Negative);
 
-
     cpu.a = sub;
 
     true

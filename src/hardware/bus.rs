@@ -49,8 +49,8 @@ impl Bus {
 
         self.devices.push(dev);
         let len = self.devices.len();
-        for _addr in start.0..=end.0 {
-            self.indices.insert(_addr, len - 1);
+        for addr in start.0..=end.0 {
+            self.indices.insert(addr, len - 1);
         }
 
         Ok(())
@@ -68,6 +68,9 @@ impl Bus {
 
     /// Write on bus `data` to address `addr`
     pub fn write(&mut self, addr: Addr, data: Byte) {
+        if !self.indices.contains_key(&addr.0) {
+            panic!("No device at this address: {}", addr.0);
+        }
         let dev = &self.devices[self.indices[&addr.0]];
         dev.lock().unwrap().rx(addr, data);
     }

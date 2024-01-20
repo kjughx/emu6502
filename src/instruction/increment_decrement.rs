@@ -16,7 +16,11 @@ pub fn inc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     true
 }
 
-pub fn inx(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
+pub fn inx(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    assert!(
+        matches!(arg, InstructionArgument::Implied),
+        "Illegal addressing mode"
+    );
     cpu.x += 1;
     cpu.set(Flag::Zero, Bit(cpu.x == 0));
     cpu.set(Flag::Negative, cpu.x & Flag::Negative);
@@ -24,7 +28,11 @@ pub fn inx(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
     true
 }
 
-pub fn iny(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
+pub fn iny(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    assert!(
+        matches!(arg, InstructionArgument::Implied),
+        "Illegal addressing mode"
+    );
     cpu.y += 1;
     cpu.set(Flag::Zero, Bit(cpu.y == 0));
     cpu.set(Flag::Negative, cpu.y & Flag::Negative);
@@ -46,18 +54,26 @@ pub fn dec(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     true
 }
 
-pub fn dex(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
+pub fn dex(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    assert!(
+        matches!(arg, InstructionArgument::Implied),
+        "Illegal addressing mode"
+    );
     cpu.x -= 1;
     cpu.set(Flag::Zero, Bit(cpu.x == 0));
-    cpu.set(Flag::Negative, cpu.x  & Flag::Negative);
+    cpu.set(Flag::Negative, cpu.x & Flag::Negative);
 
     true
 }
 
-pub fn dey(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
+pub fn dey(arg: InstructionArgument, cpu: &mut CPU) -> bool {
+    assert!(
+        matches!(arg, InstructionArgument::Implied),
+        "Illegal addressing mode"
+    );
     cpu.y -= 1;
     cpu.set(Flag::Zero, Bit(cpu.y == 0));
-    cpu.set(Flag::Negative, cpu.y  & Flag::Negative);
+    cpu.set(Flag::Negative, cpu.y & Flag::Negative);
 
     true
 }
