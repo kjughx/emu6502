@@ -11,10 +11,17 @@ macro_rules! Mutex(
 );
 
 #[macro_export]
+macro_rules! dbg_bin(
+    ($b:expr) => (
+        println!("{:#09b}", $b)
+    );
+);
+
+#[macro_export]
 macro_rules! dbg_byte(
     ($b:expr) => (
         println!("{:#04X}", $b)
-    )
+    );
 );
 
 #[macro_export]

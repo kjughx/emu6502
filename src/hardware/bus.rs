@@ -52,11 +52,6 @@ impl Bus {
         for _addr in start.0..=end.0 {
             self.indices.insert(_addr, len - 1);
         }
-        println!(
-            "Registering device at [{:#06X}, {:#06X}]",
-            start.0,
-            end.0
-        );
 
         Ok(())
     }

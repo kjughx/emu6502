@@ -1,6 +1,6 @@
 use super::InstructionArgument;
 use crate::hardware::cpu::{Flag, CPU};
-use crate::types::{Bit, Byte};
+use crate::types::Bit;
 
 pub fn asl(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     match arg {
@@ -51,7 +51,7 @@ pub fn rol(arg: InstructionArgument, cpu: &mut CPU) -> bool {
         InstructionArgument::Implied => {
             let carry = cpu.is_set(Flag::Carry) as u8;
             cpu.set(Flag::Carry, cpu.a & Flag::Negative);
-            cpu.a = Byte((cpu.a << 1) | carry);
+            cpu.a = (cpu.a << 1) | carry;
             cpu.set(Flag::Zero, Bit(cpu.a == 0));
             cpu.set(Flag::Negative, cpu.a & Flag::Negative);
         }
@@ -59,7 +59,7 @@ pub fn rol(arg: InstructionArgument, cpu: &mut CPU) -> bool {
             let carry = cpu.is_set(Flag::Carry) as u8;
             let mut val = cpu.read(addr);
             cpu.set(Flag::Carry, val & Flag::Negative);
-            val = Byte((val << 1) | carry);
+            val = (val << 1) | carry;
             cpu.set(Flag::Zero, Bit(val == 0));
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write(addr, val);
@@ -73,17 +73,17 @@ pub fn rol(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn ror(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     match arg {
         InstructionArgument::Implied => {
-            let carry = cpu.is_set(Flag::Carry) as u8;
+            let carry = cpu.ps & Flag::Carry;
             cpu.set(Flag::Carry, cpu.a & Flag::Carry);
-            cpu.a = Byte((cpu.a << 1) | (carry << 7));
+            cpu.a = (cpu.a >> 1) | (carry << Flag::Negative);
             cpu.set(Flag::Zero, Bit(cpu.a == 0));
             cpu.set(Flag::Negative, cpu.a & Flag::Negative);
         }
         InstructionArgument::Address(addr) => {
-            let carry = cpu.is_set(Flag::Carry) as u8;
+            let carry = cpu.ps & Flag::Carry;
             let mut val = cpu.read(addr);
             cpu.set(Flag::Carry, val & Flag::Carry);
-            val = Byte((val << 1) | (carry << 7));
+            val = (val >> 1) | (carry << Flag::Negative);
             cpu.set(Flag::Zero, Bit(val == 0));
             cpu.set(Flag::Negative, val & Flag::Negative);
             cpu.write(addr, val);

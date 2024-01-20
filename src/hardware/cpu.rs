@@ -21,8 +21,8 @@ pub enum Flag {
     Zero,
     InterruptDisable,
     DecimalMode,
-    BreakCmd,
-    Unused,
+    Break,
+    Reserved,
     Overflow,
     Negative,
 }
@@ -72,15 +72,18 @@ impl CPU {
 
     /// Set `flag` of the processor status to `bit`
     pub fn set(&mut self, flag: Flag, bit: Bit) {
+        assert!(!matches!(flag, Flag::Break), "Can't set BREAK flag");
         if bit.0 {
             self.ps |= Byte(1 << (flag as u8));
         } else {
             self.ps &= !Byte(1 << (flag as u8));
         }
+
+        self.ps = self.ps | Flag::Reserved; // Always set
     }
 
     /// Push `data` onto the stack
-    /// 
+    ///
     /// Note: This decrements `self.sp`
     pub fn push_stack(&mut self, data: Byte) {
         self.bus.lock().unwrap().write(STACK_START + self.sp, data);
@@ -93,7 +96,7 @@ impl CPU {
     }
 
     /// Pop `data` from the stack
-    /// 
+    ///
     /// Note: This decrements `self.sp`
     pub fn pop_stack(&mut self) -> Byte {
         if self.sp == STACK_END & 0xFF {
@@ -112,19 +115,26 @@ impl CPU {
 
     /// Write `data` to `self.bus` at `addr`
     pub fn write(&mut self, addr: Addr, data: Byte) {
-        assert!(addr.0 < 0x0100 || addr.0 > 0x01ff, "tried to write to stack at {:#06X}", addr.0);
+        assert!(
+            addr.0 < 0x0100 || addr.0 > 0x01ff,
+            "tried to write to stack at {:#06X}",
+            addr.0
+        );
         self.bus.lock().unwrap().write(addr, data)
     }
 
     /// Emulate a hard reset
     pub fn reset(&mut self) {
-        self.ps = Byte::from(0x00);
-        self.a = Byte::from(0x00);
-        self.sp = Byte::from(0xfd);
+        self.x = Byte(0x00);
+        self.y = Byte(0x00);
+        self.ps = Byte(0x00);
+        self.a = Byte(0x00);
+        self.sp = Byte(0xfd);
+
+        self.set(Flag::InterruptDisable, Bit(true));
 
         let low_addr = self.read(Addr::from(0xfffc));
         let hi_addr = Addr::from(self.read(Addr::from(0xfffd)));
-        println!("Read {:#06X} {:#06X} ", low_addr.0, hi_addr.0);
         self.pc = (hi_addr << 8) | low_addr;
     }
 
@@ -139,18 +149,15 @@ impl CPU {
         self.push_stack(self.ps);
 
         self.set(Flag::InterruptDisable, Bit(true));
-        self.set(Flag::BreakCmd, Bit(false));
 
         let low_addr = self.read(Addr::from(0xfffe));
         let hi_addr = self.read(Addr::from(0xffff));
         self.pc = (Addr::from(hi_addr) << 8) | low_addr;
-        dbg!(self.pc);
     }
 
     /// Handle a non-maskable interrupt
     pub fn nmi_irq(&mut self) {
         self.set(Flag::InterruptDisable, Bit(true));
-        self.set(Flag::BreakCmd, Bit(false));
 
         self.push_stack(Byte::from(self.pc & 0x00ff));
         self.push_stack(Byte::from(self.pc & 0xff00));
@@ -170,10 +177,11 @@ impl CPU {
         self._irq_pending = false;
     }
 
-    pub fn halt(&self) {
-        eprintln!("CPU halted!");
+    pub fn halt(&self, msg: Option<&'static str>) {
+        eprintln!("CPU halted!: {}", msg.unwrap_or_default());
         println!("State of CPU: ");
         println!("{self}");
+        std::process::exit(1);
     }
 
     /// Execute next instruction
@@ -182,7 +190,7 @@ impl CPU {
     /// those first
     ///
     /// Note: This increments `self.pc`
-    pub fn exec(&mut self) {
+    pub fn exec(&mut self) -> bool {
         if self._nmi_pending {
             self.nmi_irq();
         }
@@ -194,6 +202,7 @@ impl CPU {
         let (instruction, addressing_mode) = get_instruction(self.read(self.pc));
         let arg = addressing_mode.get(self);
 
+        let prev_pc = self.pc;
         // Move self.pc past the argument of the instruction
         if instruction.exec(arg, self) {
             self.pc += match addressing_mode {
@@ -211,6 +220,18 @@ impl CPU {
                 AddressingMode::AbsoluteY => 3,
             }
         }
+        if self.pc == prev_pc {
+            println!("TRAP: {:#06X}", prev_pc.0);
+            println!("{self}");
+            return false;
+        }
+
+        if self.pc == Addr(0x0400) {
+            println!("SUCCESS");
+            std::process::exit(0);
+        }
+
+        return true;
     }
 }
 
@@ -218,8 +239,18 @@ impl Display for CPU {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "\tPC: {:#06x}\n\tSP: {:#02x}\n\ta: {:#02x}, x: {:#02x}, y: {:#02x}\n\tPS: {:#010b}",
-            self.pc.0, self.sp.0, self.a.0, self.x.0, self.y.0, self.ps.0
+            "\tPC: {:#06x}\n\tSP: {:#02x}\n\ta: {:#02x}, x: {:#02x}, y: {:#02x}\n",
+            self.pc.0, self.sp.0, self.a.0, self.x.0, self.y.0
+        )?;
+        write!(
+            f,
+            "\tC: {}, Z: {}, I: {}, D: -\n\tB: {}, V: {}, N: {}",
+            self.ps & Flag::Carry,
+            self.ps & Flag::Zero,
+            self.ps & Flag::InterruptDisable,
+            self.ps & Flag::Break,
+            self.ps & Flag::Overflow,
+            self.ps & Flag::Negative
         )
     }
 }

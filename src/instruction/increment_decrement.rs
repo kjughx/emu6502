@@ -11,6 +11,7 @@ pub fn inc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 
     cpu.write(addr, val);
     cpu.set(Flag::Zero, Bit(val == 0));
+    cpu.set(Flag::Negative, val & Flag::Negative);
 
     true
 }
@@ -18,6 +19,7 @@ pub fn inc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn inx(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
     cpu.x += 1;
     cpu.set(Flag::Zero, Bit(cpu.x == 0));
+    cpu.set(Flag::Negative, cpu.x & Flag::Negative);
 
     true
 }
@@ -25,6 +27,7 @@ pub fn inx(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn iny(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
     cpu.y += 1;
     cpu.set(Flag::Zero, Bit(cpu.y == 0));
+    cpu.set(Flag::Negative, cpu.y & Flag::Negative);
 
     true
 }
@@ -38,6 +41,7 @@ pub fn dec(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 
     cpu.write(addr, val);
     cpu.set(Flag::Zero, Bit(val == 0));
+    cpu.set(Flag::Negative, val & Flag::Negative);
 
     true
 }
@@ -45,6 +49,7 @@ pub fn dec(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn dex(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
     cpu.x -= 1;
     cpu.set(Flag::Zero, Bit(cpu.x == 0));
+    cpu.set(Flag::Negative, cpu.x  & Flag::Negative);
 
     true
 }
@@ -52,6 +57,7 @@ pub fn dex(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn dey(_arg: InstructionArgument, cpu: &mut CPU) -> bool {
     cpu.y -= 1;
     cpu.set(Flag::Zero, Bit(cpu.y == 0));
+    cpu.set(Flag::Negative, cpu.y  & Flag::Negative);
 
     true
 }

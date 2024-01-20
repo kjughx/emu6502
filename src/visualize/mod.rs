@@ -42,6 +42,9 @@ pub const TEXT_BOX_Y: i32 = PROMPT_HEIGHT - CH * 4;
 pub const TEXT_BOX_WIDTH: i32 = 200;
 pub const TEXT_BOX_HEIGHT: i32 = CH * 3;
 
+pub const BACKGROUND_COLOR: Color = Color::RGBA(0, 0, 0, 255); // BLACK
+pub const TEXT_COLOR: Color = Color::RGBA(34, 180, 85, 255);
+
 fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(), String> {
     let texture_creator = canvas.texture_creator();
 
@@ -56,7 +59,7 @@ fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(),
             (PROMPT_WIDTH + PROMPT_MARGIN),
             (PROMPT_HEIGHT + PROMPT_MARGIN)
         ),
-        Color::RGBA(255, 255, 255, 255),
+        BACKGROUND_COLOR,
     )?;
     surface.fill_rect(
         rect!(
@@ -65,14 +68,14 @@ fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(),
             PROMPT_WIDTH - PROMPT_MARGIN,
             PROMPT_HEIGHT - PROMPT_MARGIN
         ),
-        Color::RGBA(0, 0, 255, 255),
+        BACKGROUND_COLOR,
     )?;
 
     blit_text(txt, font, &mut surface, CW, CH)?;
 
     surface.fill_rect(
         rect!(TEXT_BOX_X, TEXT_BOX_Y, TEXT_BOX_WIDTH, TEXT_BOX_HEIGHT),
-        Color::RGBA(0, 0, 255, 255),
+        BACKGROUND_COLOR,
     )?;
 
     let texture = texture_creator
@@ -95,7 +98,7 @@ fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(),
 
 pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
     let (ctx, mut canvas, ttf) = new()?;
-    canvas.set_draw_color(Color::RGBA(0, 0, 255, 255)); // BLUE
+    canvas.set_draw_color(BACKGROUND_COLOR);
     canvas.clear();
     let mut font = ttf.load_font("/usr/share/fonts/TTF/JetBrainsMono-Bold.ttf", 128)?;
     let mut event_pump = ctx.event_pump()?;
@@ -180,14 +183,14 @@ pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
         }
 
         if refresh {
-            canvas.set_draw_color(Color::RGBA(0, 0, 255, 255)); // BLUE
+            canvas.set_draw_color(BACKGROUND_COLOR);
             canvas.clear();
             update(&cpu, &mut canvas, &mut font, memory_view_start)?;
             if input {
                 prompt(prompt_text, &mut canvas, &mut font)?;
                 if !input_buffer.is_empty() {
                     let mut surface = surface!(TEXT_BOX_WIDTH, TEXT_BOX_HEIGHT)?;
-                    surface.fill_rect(None, Color::RGBA(0, 0, 255, 255))?;
+                    surface.fill_rect(None, BACKGROUND_COLOR)?;
                     blit_text(&input_buffer.join(""), &font, &mut surface, 0, CH)?;
                     let texture_creator = canvas.texture_creator();
                     let texture = texture_creator
@@ -238,7 +241,6 @@ pub fn update(
     let mut current_line = 1;
     let mut surface = surface!(WIDTH, HEIGHT)?;
 
-    // Now begins the heavy lifting...
     // Title
     blit_text(
         "6502 CPU",
@@ -292,7 +294,7 @@ pub fn update(
 
     let txt = format!(
         "B: {}, V: {}, N: {}",
-        _cpu.ps & Flag::BreakCmd,
+        _cpu.ps & Flag::Break,
         _cpu.ps & Flag::Overflow,
         _cpu.ps & Flag::Negative
     );
@@ -394,7 +396,7 @@ fn blit_text(
 ) -> Result<Option<Rect>, String> {
     let surface = font
         .render(txt)
-        .blended(Color::RGBA(255, 255, 255, 255))
+        .blended(TEXT_COLOR)
         .map_err(|e| e.to_string())?;
 
     surface.blit_scaled(None, dst, rect!(x, y, (txt.len() as i32) * CW, CH))

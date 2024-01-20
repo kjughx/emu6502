@@ -28,6 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bus = Mutex!(Bus::new()); // Everyone talks over this
 
     let memory = Mutex!(Memory::new());
+
     let rom = Mutex!(Rom::new(args.load));
 
     let keyboard = Mutex!(Keyboard::new(bus.clone()));
@@ -43,13 +44,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     bus.lock()
         .unwrap()
+        .register(memory, MEMORY_START, MEMORY_SIZE)?;
+
+    bus.lock()
+        .unwrap()
         .register(keyboard, Addr(0x5000), Addr(0x5001))?;
     bus.lock()
         .unwrap()
         .register(display, Addr(0x5002), Addr(0x5003))?;
-    bus.lock()
-        .unwrap()
-        .register(memory, MEMORY_START, Addr(MEMORY_START.0 + MEMORY_SIZE.0))?;
     bus.lock()
         .unwrap()
         .register(rom, ROM_START, Addr(ROM_START.0 + ROM_SIZE.0))?;
@@ -60,8 +62,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         visualize::run(cpu)?;
     } else {
         loop {
-            cpu.lock().unwrap().exec()
+            if !cpu.lock().unwrap().exec() {
+                break;
+            }
         }
+        visualize::run(cpu)?;
     }
 
     Ok(())

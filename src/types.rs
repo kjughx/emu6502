@@ -11,12 +11,33 @@ pub struct Byte(pub u8);
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Addr(pub u16);
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd, Debug)]
 pub struct Bit(pub bool);
 
 impl core::fmt::Display for Bit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0 as u8)
+    }
+}
+
+impl BitXor<Byte> for Byte {
+    type Output = Byte;
+    fn bitxor(self, rhs: Byte) -> Self::Output {
+        Byte(self.0 ^ rhs.0)
+    }
+}
+
+impl BitOr<Flag> for Byte {
+    type Output = Byte;
+    fn bitor(self, rhs: Flag) -> Self::Output {
+        self | (Bit(true) << rhs)
+    }
+}
+
+impl BitOr<Byte> for Byte {
+    type Output = Byte;
+    fn bitor(self, rhs: Byte) -> Self::Output {
+        Byte(self.0 | rhs.0)
     }
 }
 
@@ -28,9 +49,9 @@ impl Sub<u8> for Addr {
 }
 
 impl Not for Flag {
-    type Output = u8;
+    type Output = Byte;
     fn not(self) -> Self::Output {
-        !(1 << (self as u8))
+        Byte(!(1 << (self as u8)))
     }
 }
 
@@ -87,7 +108,7 @@ impl BitXor<Bit> for Bit {
 impl BitAnd<Bit> for Bit {
     type Output = Bit;
     fn bitand(self, rhs: Bit) -> Self::Output {
-        Bit(self.0 == rhs.0)
+        Bit(self.0 & rhs.0)
     }
 }
 impl Add<Bit> for Byte {
@@ -96,15 +117,35 @@ impl Add<Bit> for Byte {
         Byte(self.0 + rhs.0 as u8)
     }
 }
+
+impl Sub<Bit> for Byte {
+    type Output = Byte;
+    fn sub(self, rhs: Bit) -> Self::Output {
+        Byte(self.0 - rhs.0 as u8)
+    }
+}
+
 impl Add<Byte> for Bit {
     type Output = Byte;
     fn add(self, rhs: Byte) -> Self::Output {
         Byte(self.0 as u8 + rhs.0)
     }
 }
+
+impl Not for Bit {
+    type Output = Bit;
+    fn not(self) -> Self::Output {
+        Bit(!self.0)
+    }
+}
+
 impl BitAnd<Flag> for Byte {
     type Output = Bit;
     fn bitand(self, rhs: Flag) -> Self::Output {
+        if matches!(rhs, Flag::Reserved) {
+            return Bit(true);
+        }
+
         Bit((self.0 & (1 << rhs as u8)) != 0)
     }
 }
@@ -113,6 +154,13 @@ impl Add<Byte> for Byte {
     type Output = Byte;
     fn add(self, rhs: Byte) -> Self::Output {
         Self(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Byte> for Byte {
+    type Output = Byte;
+    fn sub(self, rhs: Byte) -> Self::Output {
+        Self(self.0 - rhs.0)
     }
 }
 
@@ -283,9 +331,9 @@ impl Not for Byte {
 }
 
 impl BitOr<u8> for Byte {
-    type Output = u8;
+    type Output = Byte;
     fn bitor(self, rhs: u8) -> Self::Output {
-        self.0 | rhs
+        Byte(self.0 | rhs)
     }
 }
 

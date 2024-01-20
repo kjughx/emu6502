@@ -1,6 +1,6 @@
 use super::InstructionArgument;
 use crate::hardware::cpu::{Flag, CPU};
-use crate::types::*;
+use crate::{types::*, dbg_byte};
 
 pub fn and(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let val = match arg {
@@ -46,10 +46,11 @@ pub fn bit(arg: InstructionArgument, cpu: &mut CPU) -> bool {
         unreachable!("Illegal addressing mode: {:?}", arg)
     };
 
-    let val = cpu.a & cpu.read(addr);
+    let val = cpu.read(addr);
+    dbg_byte!(val.0);
+    cpu.set(Flag::Zero, Bit(val & cpu.a == 0));
     cpu.set(Flag::Negative, val & Flag::Negative);
     cpu.set(Flag::Overflow, val & Flag::Overflow);
-    cpu.set(Flag::Zero, Bit(val == 0));
 
     true
 }

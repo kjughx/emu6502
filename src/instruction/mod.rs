@@ -66,21 +66,21 @@ impl AddressingMode {
             AddressingMode::Indirect => {
                 let low_addr = cpu.read(cpu.pc + 1);
                 let hi_addr = cpu.read(cpu.pc + 2);
-                let _addr = ((Addr::from(hi_addr) << 8) | low_addr) + cpu.y;
+                let _addr = (Addr::from(hi_addr) << 8) | low_addr;
                 InstructionArgument::Address(
-                    Addr::from((cpu.read(_addr)) << 8) | cpu.read(_addr + 1),
+                    (Addr::from(cpu.read(_addr + 1)) << 8) | cpu.read(_addr),
                 )
             }
             AddressingMode::IndirectX => {
-                let _lo = cpu.read(cpu.pc + 1) + cpu.x;
-                let _hi = cpu.read(cpu.pc + 2);
-                InstructionArgument::Address(Addr::from(_hi << 8) | _lo)
+                let _addr = Addr::from(cpu.read(cpu.pc + 1) + cpu.x);
+                InstructionArgument::Address(
+                    (Addr::from(cpu.read(_addr + 1)) << 8) | cpu.read(_addr),
+                )
             }
             AddressingMode::IndirectY => {
-                let _addr = cpu.read(cpu.pc + 1);
-                dbg!(_addr, cpu.y);
-                let low_addr = cpu.read(_addr.into());
-                let hi_addr = cpu.read((_addr + 1).into());
+                let _addr = Addr::from(cpu.read(cpu.pc + 1));
+                let low_addr = cpu.read(_addr);
+                let hi_addr = cpu.read(_addr + 1);
                 InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
             }
             AddressingMode::Relative => InstructionArgument::Offset(cpu.read(cpu.pc + 1)),
@@ -271,7 +271,7 @@ impl Instruction {
             }
             Instruction::PHP => {
                 assert!(matches!(arg, InstructionArgument::Implied));
-                cpu.push_stack(cpu.ps);
+                cpu.push_stack(cpu.ps | Flag::Break | Flag::Reserved);
                 true
             }
             Instruction::PLA => {
@@ -284,6 +284,8 @@ impl Instruction {
             Instruction::PLP => {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 cpu.ps = cpu.pop_stack();
+                cpu.ps = cpu.ps | Flag::Reserved;
+                cpu.ps = cpu.ps & !Flag::Break;
                 true
             }
 
@@ -324,7 +326,7 @@ impl Instruction {
                     unreachable!("Illegal addressing mode: {:?}", arg);
                 };
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from((cpu.pc & 0x00ff) + 3));
+                cpu.push_stack(Byte::from((cpu.pc & 0x00ff) + 2));
                 cpu.pc = addr;
 
                 false
@@ -333,7 +335,7 @@ impl Instruction {
                 assert!(matches!(arg, InstructionArgument::Implied));
                 let low_addr = cpu.pop_stack();
                 let hi_addr = cpu.pop_stack();
-                cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
+                cpu.pc = (Addr::from(hi_addr) << 8) | low_addr + 1;
 
                 false
             }
@@ -486,26 +488,24 @@ impl Instruction {
             // System Functions
             Instruction::BRK => {
                 cpu.push_stack(Byte::from(cpu.pc >> 8));
-                cpu.push_stack(Byte::from(cpu.pc & 0xff));
-                cpu.push_stack(cpu.ps);
+                cpu.push_stack(Byte::from(cpu.pc & 0xff) + 2);
+                cpu.push_stack(cpu.ps | Flag::Break);
                 let low_addr = cpu.read(Addr::from(0xfffe));
                 let hi_addr = cpu.read(Addr::from(0xffff));
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
-                cpu.set(Flag::BreakCmd, Bit(true));
+                cpu.set(Flag::InterruptDisable, Bit(true));
                 false
             }
             Instruction::NOP => true,
             Instruction::RTI => {
-                cpu.ps = cpu.pop_stack();
-                cpu.set(Flag::BreakCmd, Bit(false));
-                let hi_addr = cpu.pop_stack();
+                cpu.ps = cpu.pop_stack() & !Flag::Break | Flag::Reserved;
                 let low_addr = cpu.pop_stack();
+                let hi_addr = cpu.pop_stack();
                 cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
-                cpu.unpend_irq();
                 false
             }
             Instruction::XXX => {
-                cpu.halt();
+                cpu.halt(Some("Illegal Instruction"));
                 false
             }
         }
@@ -682,7 +682,10 @@ impl Instruction {
 
             Instruction::CLV => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::BCS => matches!(addressing_mode, AddressingMode::Relative),
-            Instruction::JMP => matches!(addressing_mode, AddressingMode::Absolute),
+            Instruction::JMP => matches!(
+                addressing_mode,
+                AddressingMode::Absolute | AddressingMode::Indirect
+            ),
 
             Instruction::BVS => matches!(addressing_mode, AddressingMode::Relative),
             Instruction::BEQ => matches!(addressing_mode, AddressingMode::Relative),
@@ -738,7 +741,14 @@ pub fn get_instruction(op_code: Byte) -> (Instruction, AddressingMode) {
     if INSTRUCTIONS.contains_key(&op_code) {
         INSTRUCTIONS[&op_code.0]
     } else {
-        (Instruction::NOP, AddressingMode::Implied)
+        if matches!(
+            op_code.0,
+            0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2
+        ) {
+            (Instruction::XXX, AddressingMode::Implied)
+        } else {
+            (Instruction::NOP, AddressingMode::Implied)
+        }
     }
 }
 
@@ -759,7 +769,7 @@ pub static INSTRUCTIONS: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! 
     0x3Du8 => (Instruction::AND, AddressingMode::AbsoluteX),
     0x39u8 => (Instruction::AND, AddressingMode::AbsoluteY),
     0x21u8 => (Instruction::AND, AddressingMode::IndirectX),
-    0x31u8 => (Instruction::AND, AddressingMode::Indirect),
+    0x31u8 => (Instruction::AND, AddressingMode::IndirectY),
 
     0x0Au8 => (Instruction::ASL, AddressingMode::Implied),
     0x06u8 => (Instruction::ASL, AddressingMode::ZeroPage),
