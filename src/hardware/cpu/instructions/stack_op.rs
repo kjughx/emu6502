@@ -1,5 +1,5 @@
 use super::InstructionArgument;
-use crate::hardware::cpu::{Flag, CPU};
+use crate::hardware::cpu::{Flag, Register, CPU};
 use crate::types::Bit;
 
 pub fn tax(arg: InstructionArgument, cpu: &mut CPU) -> bool {
@@ -54,7 +54,7 @@ pub fn pha(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 
 pub fn php(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     assert!(matches!(arg, InstructionArgument::Implied));
-    cpu.push_stack(cpu.ps | Flag::Break | Flag::Reserved);
+    cpu.push_stack(cpu.get_reg(Register::PS) | Flag::Break);
     true
 }
 
@@ -69,7 +69,48 @@ pub fn pla(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 pub fn plp(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     assert!(matches!(arg, InstructionArgument::Implied));
     cpu.ps = cpu.pop_stack();
-    cpu.ps |= Flag::Reserved;
     cpu.ps &= !Flag::Break;
     true
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    pub fn test_stack() {
+        use crate::hardware::*;
+        use crate::types::*;
+        use crate::Mutex;
+        use std::sync::{Arc, Mutex};
+
+        let bus = Mutex!(bus::Bus::new());
+        let memory = Mutex!(memory::Memory::new(Addr(0xffff)));
+        bus.lock()
+            .unwrap()
+            .register(memory, Addr(0x0000), Addr(0xffff))
+            .unwrap();
+
+        for (i, byte) in include_bytes!("stack.bin").iter().enumerate() {
+            bus.lock().unwrap().write(Addr(i as u16), Byte(*byte));
+        }
+
+        let cpu = Mutex!(cpu::CPU::new(bus));
+        cpu.lock().unwrap().set_pc(Addr(0x0400));
+
+        let mut instructions = 0;
+
+        loop {
+            if !cpu.lock().unwrap().exec() {
+                break;
+            }
+            instructions += 1;
+            assert!(instructions <= 185, "Too many instructions!");
+        }
+
+        assert_eq!(
+            cpu.lock().unwrap().get_pc(),
+            Addr(0x0518),
+            "Failure: {:#06X}",
+            cpu.lock().unwrap().get_pc().0
+        );
+    }
 }

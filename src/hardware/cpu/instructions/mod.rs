@@ -7,7 +7,6 @@ mod load_store;
 mod logical;
 mod shift;
 mod stack_op;
-mod system_fn;
 
 use std::fmt::Display;
 
@@ -227,12 +226,12 @@ impl Instruction {
             Instruction::EOR => logical::eor(arg, cpu),
             Instruction::ORA => logical::ora(arg, cpu),
             Instruction::BIT => logical::bit(arg, cpu),
+            Instruction::CMP => logical::cmp(arg, cpu),
+            Instruction::CPX => logical::cpx(arg, cpu),
+            Instruction::CPY => logical::cpy(arg, cpu),
 
             Instruction::ADC => arithmetic::adc(arg, cpu),
             Instruction::SBC => arithmetic::sbc(arg, cpu),
-            Instruction::CMP => arithmetic::cmp(arg, cpu),
-            Instruction::CPX => arithmetic::cpx(arg, cpu),
-            Instruction::CPY => arithmetic::cpy(arg, cpu),
 
             Instruction::INC => increment_decrement::inc(arg, cpu),
             Instruction::INX => increment_decrement::inx(arg, cpu),
@@ -249,6 +248,8 @@ impl Instruction {
             Instruction::JMP => jump_call::jmp(arg, cpu),
             Instruction::JSR => jump_call::jsr(arg, cpu),
             Instruction::RTS => jump_call::rts(arg, cpu),
+            Instruction::BRK => jump_call::brk(arg, cpu),
+            Instruction::RTI => jump_call::rti(arg, cpu),
 
             Instruction::BCC => branch::bcc(arg, cpu),
             Instruction::BCS => branch::bcs(arg, cpu),
@@ -267,9 +268,7 @@ impl Instruction {
             Instruction::SED => flag::sed(arg, cpu),
             Instruction::SEI => flag::sei(arg, cpu),
 
-            Instruction::BRK => system_fn::brk(arg, cpu),
             Instruction::NOP => true,
-            Instruction::RTI => system_fn::rti(arg, cpu),
             Instruction::XXX => {
                 cpu.halt(Some("Illegal Instruction"));
                 false

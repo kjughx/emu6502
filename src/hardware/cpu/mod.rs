@@ -1,19 +1,24 @@
-use super::bus::{Bus, STACK_END, STACK_START};
-use crate::instruction::{get_instruction, AddressingMode};
+use super::cpu::instructions::*;
+use crate::hardware::bus::Bus;
 use crate::types::*;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
+pub mod instructions;
 
-/// @brief: The processor status flags
+pub const STACK_START: Addr = Addr(0x100);
+pub const STACK_END: Addr = Addr(0x01ff);
+pub const STACK_SIZE: usize = 0xff;
+
+/// brief: The processor status flags
 ///
-/// @Carry: Set if last operation overflow bit 7 or underflowed bit 0
-/// @Zero: Set if last operation resulted in zero
-/// @InterruptDisable: Set if interrupts should be ignored
-/// @DecimalMode: Not Supported
-/// @BreakCmd: Set if the BRK instruction was executed
-/// @Unused: Unused
-/// @Overflow: Set if last operation yieled incorrect 2's complement
-/// @Negative: Set if last operation resulted in a negative value
+/// Carry: Set if last operation overflow bit 7 or underflowed bit 0
+/// Zero: Set if last operation resulted in zero
+/// InterruptDisable: Set if interrupts should be ignored
+/// DecimalMode: Not Supported
+/// BreakCmd: Set if the BRK instruction was executed
+/// Unused: Unused
+/// Overflow: Set if last operation yieled incorrect 2's complement
+/// Negative: Set if last operation resulted in a negative value
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum Flag {
@@ -27,30 +32,38 @@ pub enum Flag {
     Negative,
 }
 
-///@brief: Contains the CPU state
+pub enum Register {
+    A,
+    X,
+    Y,
+    PS,
+}
+
+///Contains the CPU state
 ///
-///@pc: Program Counter
-///@sp: Stack Pointer
-///@a:  Acculumator
-///@x:  Index Register X
-///@y:  Index Register Y
-///@ps: Processor Status
+///pc: Program Counter
+///sp: Stack Pointer
+///a:  Acculumator
+///x:  Index Register X
+///y:  Index Register Y
+///ps: Processor Status
 pub struct CPU {
-    pub pc: Addr, // Program Counter
-    pub sp: Byte, // Stack Pointer
+    pc: Addr, // Program Counter
+    sp: Byte, // Stack Pointer
 
-    pub a: Byte, // Acculumator
-    pub x: Byte, // Index Register X
-    pub y: Byte, // Index Register Y
+    a: Byte, // Acculumator
+    x: Byte, // Index Register X
+    y: Byte, // Index Register Y
 
-    pub ps: Byte, // Processor Status
+    ps: Byte, // Processor Status
     bus: Arc<Mutex<Bus>>,
 
-    _irq_pending: bool,
-    _nmi_pending: bool,
+    irq_pending: bool,
+    nmi_pending: bool,
 }
 
 impl CPU {
+    /// Create a CPU instance connected on `bus`
     pub fn new(bus: Arc<Mutex<Bus>>) -> Self {
         Self {
             pc: Addr(0xfffc),
@@ -60,8 +73,8 @@ impl CPU {
             y: Byte(0x00),
             ps: Byte(0x00),
             bus,
-            _irq_pending: false,
-            _nmi_pending: false,
+            irq_pending: false,
+            nmi_pending: false,
         }
     }
 
@@ -78,13 +91,11 @@ impl CPU {
         } else {
             self.ps &= !Byte(1 << (flag as u8));
         }
-
-        self.ps |= Flag::Reserved; // Always set
     }
 
     /// Push `data` onto the stack
     ///
-    /// Note: This decrements `self.sp`
+    /// Note: This decrements the stack pointer
     pub fn push_stack(&mut self, data: Byte) {
         self.bus.lock().unwrap().write(STACK_START + self.sp, data);
 
@@ -97,7 +108,7 @@ impl CPU {
 
     /// Pop `data` from the stack
     ///
-    /// Note: This decrements `self.sp`
+    /// Note: This increments the stack pointer
     pub fn pop_stack(&mut self) -> Byte {
         if self.sp == STACK_END & 0xFF {
             self.sp = Byte(0);
@@ -108,12 +119,12 @@ impl CPU {
         self.bus.lock().unwrap().read(STACK_START + self.sp)
     }
 
-    /// Read from `self.bus` at `addr`
+    /// Read from the `bus` at `addr`
     pub fn read(&self, addr: Addr) -> Byte {
         self.bus.lock().unwrap().read(addr)
     }
 
-    /// Write `data` to `self.bus` at `addr`
+    /// Write `data` to the `bus` at `addr`
     pub fn write(&mut self, addr: Addr, data: Byte) {
         assert!(
             addr.0 < 0x0100 || addr.0 > 0x01ff,
@@ -139,7 +150,7 @@ impl CPU {
     }
 
     /// Handle an interrupt request
-    pub fn irq(&mut self) {
+    fn irq(&mut self) {
         if self.is_set(Flag::InterruptDisable) {
             return;
         }
@@ -156,7 +167,7 @@ impl CPU {
     }
 
     /// Handle a non-maskable interrupt
-    pub fn nmi_irq(&mut self) {
+    fn nmi_irq(&mut self) {
         self.set(Flag::InterruptDisable, Bit(true));
 
         self.push_stack(Byte::from(self.pc & 0x00ff));
@@ -167,14 +178,9 @@ impl CPU {
         self.pc = (Addr::from(hi_addr) << 8) | low_addr;
     }
 
-    /// Set `self._irq_pending`
+    /// Set a pending interrupt request
     pub fn pend_irq(&mut self) {
-        self._irq_pending = true;
-    }
-
-    /// Clear `self._irq_pending`
-    pub fn unpend_irq(&mut self) {
-        self._irq_pending = false;
+        self.irq_pending = true;
     }
 
     pub fn halt(&self, msg: Option<&'static str>) {
@@ -186,16 +192,15 @@ impl CPU {
 
     /// Execute next instruction
     ///
-    /// If an interrupt is pending then handle
-    /// those first
+    /// If an interrupt is pending then handle that first
     ///
-    /// Note: This increments `self.pc`
+    /// Note: This increments the program counter
     pub fn exec(&mut self) -> bool {
-        if self._nmi_pending {
+        if self.nmi_pending {
             self.nmi_irq();
         }
 
-        if self._irq_pending {
+        if self.irq_pending {
             self.irq();
         }
 
@@ -220,18 +225,39 @@ impl CPU {
                 AddressingMode::AbsoluteY => 3,
             }
         }
+
         if self.pc == prev_pc {
             println!("TRAP: {:#06X}", prev_pc.0);
             println!("{self}");
             return false;
         }
 
-        if self.pc == Addr(0x0400) {
-            println!("SUCCESS");
-            std::process::exit(0);
-        }
-
         true
+    }
+
+    /// Read the program counter
+    pub fn get_pc(&self) -> Addr {
+        self.pc
+    }
+
+    // #[cfg(test)]
+    pub fn set_pc(&mut self, addr: Addr) {
+        self.pc = addr;
+    }
+
+    /// Read the stack pointer
+    pub fn get_sp(&self) -> Byte {
+        self.sp
+    }
+
+    /// Read register `reg`
+    pub fn get_reg(&self, reg: Register) -> Byte {
+        match reg {
+            Register::A => self.a,
+            Register::X => self.x,
+            Register::Y => self.y,
+            Register::PS => self.ps | Flag::Reserved, // Flag::Reserved is always set
+        }
     }
 }
 

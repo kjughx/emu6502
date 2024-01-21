@@ -2,10 +2,6 @@ use crate::types::{Addr, Byte};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-pub const STACK_START: Addr = Addr(0x100);
-pub const STACK_END: Addr = Addr(0x01ff);
-pub const STACK_SIZE: usize = 0xff;
-
 /// Encapsulates the 16-bit wide bus
 pub struct Bus {
     devices: Vec<Arc<Mutex<dyn Device>>>,
@@ -21,7 +17,12 @@ impl Default for Bus {
 /// Trait for devices on `Bus`
 pub trait Device: Send + Sync {
     /// Someone writes `data` to `addr` belonging to this device
-    fn rx(&mut self, _addr: Addr, _data: Byte) {}
+    ///
+    /// Note: The device does not necessarily need to support this.
+    #[allow(unused_variables)]
+    fn rx(&mut self, addr: Addr, data: Byte) {
+        unimplemented!("Not supported for device");
+    }
 
     /// Someone reads from `addr` belonging to this device
     fn tx(&mut self, addr: Addr) -> Byte;
@@ -59,8 +60,7 @@ impl Bus {
     /// Read on bus from address `addr`
     pub fn read(&self, addr: Addr) -> Byte {
         if !self.indices.contains_key(&addr.0) {
-            println!("Nothing registered at {:#06X}", addr.0);
-            return Byte(0x00);
+            panic!("Nothing registered at {:#06X}", addr.0);
         }
         let dev = &self.devices[self.indices[&addr.0]];
         dev.lock().unwrap().tx(addr)
@@ -69,7 +69,7 @@ impl Bus {
     /// Write on bus `data` to address `addr`
     pub fn write(&mut self, addr: Addr, data: Byte) {
         if !self.indices.contains_key(&addr.0) {
-            panic!("No device at this address: {}", addr.0);
+            panic!("Nothing registered at {:#06X}", addr.0);
         }
         let dev = &self.devices[self.indices[&addr.0]];
         dev.lock().unwrap().rx(addr, data);

@@ -6,7 +6,6 @@ use super::bus::Device;
 pub const ROM_SIZE: Addr = Addr(0x80ff);
 pub const ROM_START: Addr = Addr(0x7f00);
 
-#[derive(Clone)]
 pub struct Rom {
     data: [Byte; (ROM_SIZE.0 + 1) as usize],
 }
@@ -21,21 +20,22 @@ impl Rom {
             }
         }
 
-        Self {
-            data
-        }
+        Self { data }
     }
 }
 
 impl Device for Rom {
-    #[allow(clippy::absurd_extreme_comparisons)]
-    fn rx(&mut self, addr: Addr, data: Byte) {
-        assert!(addr.0 <= ROM_START.0 + ROM_SIZE.0, "ROM: Outside memory region {:#06X}", addr.0);
-        self.data[(addr.0 - ROM_START.0) as usize] = data;
+    fn rx(&mut self, _addr: Addr, _data: Byte) {
+        panic!("Not allowed to write to ROM");
     }
+
     #[allow(clippy::absurd_extreme_comparisons)]
     fn tx(&mut self, addr: Addr) -> Byte {
-        assert!(addr.0 <= ROM_START.0 + ROM_SIZE.0, "ROM: Outside memory region {:#06X}", addr.0);
+        assert!(
+            addr.0 <= ROM_START.0 + ROM_SIZE.0,
+            "ROM: Outside memory region {:#06X}",
+            addr.0
+        );
         self.data[(addr.0 - ROM_START.0) as usize]
     }
 }

@@ -27,11 +27,19 @@ impl Memory {
 
 impl Device for Memory {
     fn rx(&mut self, addr: Addr, data: Byte) {
-        assert!(addr <= MEMORY_START + self.size, "Outside memory region");
+        assert!(
+            addr <= MEMORY_START + self.size,
+            "Outside memory region: {:#06X}",
+            addr.0
+        );
         self.data[addr.0 as usize] = data;
     }
     fn tx(&mut self, addr: Addr) -> Byte {
-        assert!(addr <= MEMORY_START + self.size, "Outside memory region");
+        assert!(
+            addr <= MEMORY_START + self.size,
+            "Outside memory region: {:#06X}",
+            addr.0
+        );
         self.data[addr.0 as usize]
     }
 }

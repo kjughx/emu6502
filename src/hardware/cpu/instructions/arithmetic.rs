@@ -52,44 +52,44 @@ pub fn sbc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     true
 }
 
-pub fn cmp(arg: InstructionArgument, cpu: &mut CPU) -> bool {
-    let val = match arg {
-        InstructionArgument::Immediate(v) => v,
-        InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg),
-    };
+#[cfg(test)]
+mod test {
+    #[test]
+    pub fn test_arithmetic() {
+        use crate::hardware::*;
+        use crate::types::*;
+        use crate::Mutex;
+        use std::sync::{Arc, Mutex};
 
-    cpu.set(Flag::Carry, Bit(cpu.a >= val));
-    cpu.set(Flag::Zero, Bit(cpu.a == val));
-    cpu.set(Flag::Negative, Bit(cpu.a < val));
+        let bus = Mutex!(bus::Bus::new());
+        let memory = Mutex!(memory::Memory::new(Addr(0xffff)));
+        bus.lock()
+            .unwrap()
+            .register(memory, Addr(0x0000), Addr(0xffff))
+            .unwrap();
 
-    true
-}
+        for (i, byte) in include_bytes!("arithmetic.bin").iter().enumerate() {
+            bus.lock().unwrap().write(Addr(i as u16), Byte(*byte));
+        }
 
-pub fn cpx(arg: InstructionArgument, cpu: &mut CPU) -> bool {
-    let val = match arg {
-        InstructionArgument::Immediate(v) => v,
-        InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg),
-    };
+        let cpu = Mutex!(cpu::CPU::new(bus));
+        cpu.lock().unwrap().set_pc(Addr(0x0400));
 
-    cpu.set(Flag::Carry, Bit(cpu.x >= val));
-    cpu.set(Flag::Zero, Bit(cpu.x == val));
-    cpu.set(Flag::Negative, Bit(cpu.x < val));
+        let mut instructions = 0;
 
-    true
-}
+        loop {
+            if !cpu.lock().unwrap().exec() {
+                break;
+            }
+            instructions += 1;
+            assert!(instructions <= 26709519, "Too many instructions!");
+        }
 
-pub fn cpy(arg: InstructionArgument, cpu: &mut CPU) -> bool {
-    let val = match arg {
-        InstructionArgument::Immediate(v) => v,
-        InstructionArgument::Address(addr) => cpu.read(addr),
-        _ => unreachable!("Illegal addressing mode: {:?}", arg),
-    };
-
-    cpu.set(Flag::Carry, Bit(cpu.y >= val));
-    cpu.set(Flag::Zero, Bit(cpu.y == val));
-    cpu.set(Flag::Negative, Bit(cpu.y < val));
-
-    true
+        assert_eq!(
+            cpu.lock().unwrap().get_pc(),
+            Addr(0x0459),
+            "Failure: {:#06X}",
+            cpu.lock().unwrap().get_pc().0
+        );
+    }
 }

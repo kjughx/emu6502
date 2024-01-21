@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use emu_6502::hardware::bus::STACK_START;
-use emu_6502::hardware::cpu::{Flag, CPU};
-use emu_6502::instruction::{get_instruction, AddressingMode, Instruction};
+use emu_6502::hardware::cpu::{
+    instructions::{get_instruction, AddressingMode, Instruction},
+    Flag, Register, CPU, STACK_START,
+};
 use emu_6502::types::Addr;
 use sdl2::surface::Surface;
 use sdl2::{event::Event, keyboard::Keycode};
@@ -157,13 +158,6 @@ pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
                     refresh = true;
                 }
                 Event::KeyDown {
-                    keycode: Some(Keycode::N),
-                    ..
-                } => {
-                    cpu.lock().unwrap().nmi_irq();
-                    refresh = true
-                }
-                Event::KeyDown {
                     keycode: Some(Keycode::R),
                     ..
                 } => {
@@ -268,35 +262,43 @@ pub fn update(
     let _cpu = cpu.lock().unwrap();
 
     let (instruction, addressing_mode): (Instruction, AddressingMode) =
-        get_instruction(_cpu.read(_cpu.pc));
+        get_instruction(_cpu.read(_cpu.get_pc()));
     let arg = addressing_mode.get(&_cpu);
-    let txt = format!("PC: {:#06X} -> {} {}", _cpu.pc.0, instruction, arg);
+    let txt = format!("PC: {:#06X} -> {} {}", _cpu.get_pc().0, instruction, arg);
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
-    let txt = format!("A: {:#04X},  X: {:#04X}", _cpu.a.0, _cpu.x.0);
+    let txt = format!(
+        "A: {:#04X},  X: {:#04X}",
+        _cpu.get_reg(Register::A).0,
+        _cpu.get_reg(Register::X).0
+    );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
-    let txt = format!("Y: {:#04X}, SP: {:#04X}", _cpu.y.0, _cpu.sp.0);
+    let txt = format!(
+        "Y: {:#04X}, SP: {:#04X}",
+        _cpu.get_reg(Register::Y).0,
+        _cpu.get_sp().0
+    );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
     current_line += 3;
 
     let txt = format!(
         "C: {}, Z: {}, I: {}, D: -",
-        _cpu.ps & Flag::Carry,
-        _cpu.ps & Flag::Zero,
-        _cpu.ps & Flag::InterruptDisable,
+        _cpu.get_reg(Register::PS) & Flag::Carry,
+        _cpu.get_reg(Register::PS) & Flag::Zero,
+        _cpu.get_reg(Register::PS) & Flag::InterruptDisable,
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
     let txt = format!(
         "B: {}, V: {}, N: {}",
-        _cpu.ps & Flag::Break,
-        _cpu.ps & Flag::Overflow,
-        _cpu.ps & Flag::Negative
+        _cpu.get_reg(Register::PS) & Flag::Break,
+        _cpu.get_reg(Register::PS) & Flag::Overflow,
+        _cpu.get_reg(Register::PS) & Flag::Negative
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
