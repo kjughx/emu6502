@@ -20,10 +20,23 @@ impl core::fmt::Display for Bit {
     }
 }
 
+impl core::fmt::Display for Addr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{:x}", self.0)
+    }
+}
+
 impl Add<Addr> for Addr {
     type Output = Addr;
     fn add(self, rhs: Addr) -> Self::Output {
         Addr(self.0 + rhs.0)
+    }
+}
+
+impl Sub<Addr> for Addr {
+    type Output = Addr;
+    fn sub(self, rhs: Addr) -> Self::Output {
+        Addr(self.0 - rhs.0)
     }
 }
 
@@ -181,6 +194,31 @@ impl Add<u8> for Addr {
     type Output = Self;
     fn add(self, rhs: u8) -> Self::Output {
         Self(self.0 + rhs as u16)
+    }
+}
+
+impl Add<usize> for Addr {
+    type Output = Self;
+    fn add(self, rhs: usize) -> Self::Output {
+        let result = self.0 as usize + rhs;
+        assert!(result < usize::MAX);
+        Addr(result as u16)
+    }
+}
+
+impl Add<i32> for Byte {
+    type Output = Self;
+    fn add(self, rhs: i32) -> Self::Output {
+        let result = self.0 as i32 + rhs;
+        Byte(result as u8)
+    }
+}
+
+impl Add<i32> for Addr {
+    type Output = Self;
+    fn add(self, rhs: i32) -> Self::Output {
+        let result = self.0 as i32 + rhs;
+        Addr(result as u16)
     }
 }
 

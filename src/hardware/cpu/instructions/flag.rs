@@ -75,13 +75,14 @@ mod test {
         use std::sync::{Arc, Mutex};
 
         let bus = Mutex!(bus::Bus::new());
-        let memory = Mutex!(memory::Memory::new(Addr(0xffff)));
+        let memory = Mutex!(memory::Memory::new(Addr(0x0000), Addr(0xffff)));
         bus.lock()
             .unwrap()
-            .register(memory, Addr(0x0000), Addr(0xffff))
+            .register(memory)
             .unwrap();
 
         for (i, byte) in include_bytes!("flag.bin").iter().enumerate() {
+            println!("{}", Addr(i as u16));
             bus.lock().unwrap().write(Addr(i as u16), Byte(*byte));
         }
 

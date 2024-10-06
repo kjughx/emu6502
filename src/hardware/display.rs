@@ -6,6 +6,9 @@ pub const KEY_DATA: Addr = Addr(0x5002);
 pub const KEY_READY: Addr = Addr(0x5003);
 pub const READY: Byte = Byte(0x08);
 
+const ADDR_START: Addr = Addr(0x5002);
+const ADDR_END: Addr = Addr(0x5003);
+
 pub struct Display;
 
 impl Default for Display {
@@ -32,5 +35,8 @@ impl Device for Display {
             KEY_READY => READY,
             _ => Byte(0x00),
         }
+    }
+    fn range(&self) -> (Addr, Addr) {
+        (ADDR_START, ADDR_END)
     }
 }

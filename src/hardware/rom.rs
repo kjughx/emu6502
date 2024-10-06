@@ -4,7 +4,8 @@ use std::path::Path;
 use super::bus::Device;
 
 pub const ROM_SIZE: Addr = Addr(0x80ff);
-pub const ROM_START: Addr = Addr(0x7f00);
+const ADDR_START: Addr = Addr(0x7f00);
+const ADDR_END: Addr = Addr(0xffff);
 
 pub struct Rom {
     data: [Byte; (ROM_SIZE.0 + 1) as usize],
@@ -32,10 +33,13 @@ impl Device for Rom {
     #[allow(clippy::absurd_extreme_comparisons)]
     fn tx(&mut self, addr: Addr) -> Byte {
         assert!(
-            addr.0 <= ROM_START.0 + ROM_SIZE.0,
+            addr.0 <= ADDR_START.0 + ROM_SIZE.0,
             "ROM: Outside memory region {:#06X}",
             addr.0
         );
-        self.data[(addr.0 - ROM_START.0) as usize]
+        self.data[(addr.0 - ADDR_START.0) as usize]
+    }
+    fn range(&self) -> (Addr, Addr) {
+        (ADDR_START, ADDR_END)
     }
 }

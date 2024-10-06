@@ -1,9 +1,7 @@
 use clap::Parser;
 use emu_6502::hardware::display::Display;
-use emu_6502::hardware::keyboard::{poll, Keyboard};
-use emu_6502::hardware::memory::{MEMORY_SIZE, MEMORY_START};
-use emu_6502::hardware::rom::{Rom, ROM_SIZE, ROM_START};
-use emu_6502::types::*;
+use emu_6502::hardware::keyboard::Keyboard;
+use emu_6502::hardware::rom::Rom;
 use emu_6502::Mutex;
 use emu_6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
 
@@ -27,23 +25,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bus = Bus::new(); // Everyone talks over this
 
-    let memory = Mutex!(Memory::new(MEMORY_SIZE));
+    let memory = Mutex!(Memory::default());
     let rom = Mutex!(Rom::new(args.load));
 
     let keyboard = Mutex!(Keyboard::new());
     {
         let _keyboard = keyboard.clone();
         std::thread::spawn(|| {
-            poll(_keyboard);
+            Keyboard::poll(_keyboard);
         });
     }
 
     let display = Mutex!(Display::new());
 
-    bus.register(memory, MEMORY_START, MEMORY_SIZE)?;
-    bus.register(keyboard, Addr(0x5000), Addr(0x5001))?;
-    bus.register(display, Addr(0x5002), Addr(0x5003))?;
-    bus.register(rom, ROM_START, Addr(ROM_START.0 + ROM_SIZE.0))?;
+    bus.register(memory)?;
+    bus.register(keyboard)?;
+    bus.register(display)?;
+    bus.register(rom)?;
 
     let cpu = Mutex!(CPU::new(Mutex!(bus)));
     cpu.lock().unwrap().reset();

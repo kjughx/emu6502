@@ -10,6 +10,9 @@ pub const KEY_READY: Addr = Addr(0x5001);
 pub const READY: Byte = Byte(0x08);
 pub const NOT_READY: Byte = Byte(0x00);
 
+const ADDR_START: Addr = Addr(0x5000);
+const ADDR_END: Addr = Addr(0x5001);
+
 pub struct Keyboard {
     data: VecDeque<u8>,
 }
@@ -18,6 +21,17 @@ impl Keyboard {
     pub fn new() -> Keyboard {
         Self {
             data: vec![].into(),
+        }
+    }
+
+    pub fn poll(keyboard: Arc<Mutex<Keyboard>>) {
+        let term = Term::stdout();
+        loop {
+            let c = match term.read_char() {
+                Err(_) => continue,
+                Ok(c) => c,
+            };
+            keyboard.lock().unwrap().data.push_back(c as u8);
         }
     }
 }
@@ -42,15 +56,9 @@ impl Device for Keyboard {
             _ => unreachable!("Unsupported read :{addr:?}"),
         }
     }
-}
 
-pub fn poll(keyboard: Arc<Mutex<Keyboard>>) {
-    let term = Term::stdout();
-    loop {
-        let c = match term.read_char() {
-            Err(_) => continue,
-            Ok(c) => c,
-        };
-        keyboard.lock().unwrap().data.push_back(c as u8);
+
+    fn range(&self) -> (Addr, Addr) {
+        (ADDR_START, ADDR_END)
     }
 }

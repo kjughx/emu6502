@@ -26,6 +26,8 @@ pub trait Device: Send + Sync {
 
     /// Someone reads from `addr` belonging to this device
     fn tx(&mut self, addr: Addr) -> Byte;
+
+    fn range(&self) -> (Addr, Addr);
 }
 
 impl Bus {
@@ -39,14 +41,15 @@ impl Bus {
     pub fn register(
         &mut self,
         dev: Arc<Mutex<dyn Device>>,
-        start: Addr,
-        end: Addr,
     ) -> Result<(), String> {
+        let (start, end) = dev.lock().unwrap().range();
         for key in self.indices.keys() {
             if *key >= start.0 && *key < end.0 {
                 return Err("Overlaping addresses".to_string())?;
             }
         }
+
+        println!("Registering device at {start}..{end}");
 
         self.devices.push(dev);
         let len = self.devices.len();
@@ -69,7 +72,8 @@ impl Bus {
     /// Write on bus `data` to address `addr`
     pub fn write(&mut self, addr: Addr, data: Byte) {
         if !self.indices.contains_key(&addr.0) {
-            panic!("Nothing registered at {:#06X}", addr.0);
+            eprintln!("Nothing registered at {:#06X}", addr.0);
+            return
         }
         let dev = &self.devices[self.indices[&addr.0]];
         dev.lock().unwrap().rx(addr, data);
