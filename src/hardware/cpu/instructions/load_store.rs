@@ -70,28 +70,24 @@ mod test {
     #[test]
     pub fn test_load_store() {
         use crate::hardware::*;
-        use crate::types::*;
         use crate::Mutex;
         use std::sync::{Arc, Mutex};
 
-        let bus = Mutex!(bus::Bus::new());
-        let memory = Mutex!(memory::Memory::new(Addr(0x0000), Addr(0xffff)));
-        bus.lock()
-            .unwrap()
-            .register(memory)
-            .unwrap();
+        let mut bus = bus::Bus::new();
+        let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
+        bus.register(memory).unwrap();
 
         for (i, byte) in include_bytes!("load_store.bin").iter().enumerate() {
-            bus.lock().unwrap().write(Addr(i as u16), Byte(*byte));
+            bus.write(Addr(i as u16), Byte(*byte));
         }
 
-        let cpu = Mutex!(cpu::CPU::new(bus));
-        cpu.lock().unwrap().set_pc(Addr(0x0400));
+        let mut cpu = cpu::CPU::new(Mutex!(bus));
+        cpu.set_pc(Addr(0x0400));
 
         let mut instructions = 0;
 
         loop {
-            if !cpu.lock().unwrap().exec() {
+            if !cpu.exec() {
                 break;
             }
             instructions += 1;
@@ -99,10 +95,10 @@ mod test {
         }
 
         assert_eq!(
-            cpu.lock().unwrap().get_pc(),
+            cpu.get_pc(),
             Addr(0x10A5),
             "Failure: {:#06X}",
-            cpu.lock().unwrap().get_pc().0
+            cpu.get_pc().0
         );
     }
 }

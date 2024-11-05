@@ -25,32 +25,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bus = Bus::new(); // Everyone talks over this
 
-    let memory = Mutex!(Memory::default());
-    let rom = Mutex!(Rom::new(args.load));
+    let memory = Memory::default();
+    let rom = Rom::new(args.load);
 
-    let keyboard = Mutex!(Keyboard::new());
-    {
-        let _keyboard = keyboard.clone();
-        std::thread::spawn(|| {
-            Keyboard::poll(_keyboard);
-        });
-    }
-
-    let display = Mutex!(Display::new());
+    let keyboard = Keyboard::new();
+    let display = Display::new();
 
     bus.register(memory)?;
     bus.register(keyboard)?;
     bus.register(display)?;
     bus.register(rom)?;
 
-    let cpu = Mutex!(CPU::new(Mutex!(bus)));
-    cpu.lock().unwrap().reset();
+    let mut cpu = CPU::new(Mutex!(bus));
+    cpu.reset();
 
     if args.visualize {
         visualize::run(cpu)?;
     } else {
         loop {
-            if !cpu.lock().unwrap().exec() {
+            if !cpu.exec() {
                 break;
             }
         }

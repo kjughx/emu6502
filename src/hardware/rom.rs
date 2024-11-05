@@ -1,7 +1,7 @@
 use crate::types::{Addr, Byte};
 use std::path::Path;
 
-use super::bus::Device;
+use super::Device;
 
 pub const ROM_SIZE: Addr = Addr(0x80ff);
 const ADDR_START: Addr = Addr(0x7f00);
@@ -26,12 +26,12 @@ impl Rom {
 }
 
 impl Device for Rom {
-    fn rx(&mut self, _addr: Addr, _data: Byte) {
+    fn rx(&self, _addr: Addr, _data: Byte) {
         panic!("Not allowed to write to ROM");
     }
 
     #[allow(clippy::absurd_extreme_comparisons)]
-    fn tx(&mut self, addr: Addr) -> Byte {
+    fn tx(&self, addr: Addr) -> Byte {
         assert!(
             addr.0 <= ADDR_START.0 + ROM_SIZE.0,
             "ROM: Outside memory region {:#06X}",

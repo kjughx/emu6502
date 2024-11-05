@@ -1,5 +1,7 @@
-use crate::hardware::bus::Device;
-use crate::types::{Addr, Byte};
+use crate::{
+    hardware::Device,
+    types::{Addr, Byte},
+};
 use std::io::Write;
 
 pub const KEY_DATA: Addr = Addr(0x5002);
@@ -24,13 +26,13 @@ impl Display {
 }
 
 impl Device for Display {
-    fn rx(&mut self, addr: Addr, data: Byte) {
+    fn rx(&self, addr: Addr, data: Byte) {
         if addr == KEY_DATA {
             print!("{}", data.0 as char);
             std::io::stdout().flush().unwrap();
         }
     }
-    fn tx(&mut self, addr: Addr) -> Byte {
+    fn tx(&self, addr: Addr) -> Byte {
         match addr {
             KEY_READY => READY,
             _ => Byte(0x00),

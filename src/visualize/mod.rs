@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use emu_6502::hardware::cpu::{
     instructions::{get_instruction, AddressingMode, Instruction},
     Flag, Register, CPU, STACK_START,
@@ -97,7 +95,7 @@ fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(),
     Ok(())
 }
 
-pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
+pub fn run(mut cpu: CPU) -> Result<(), String> {
     let (ctx, mut canvas, ttf) = new()?;
     canvas.set_draw_color(BACKGROUND_COLOR);
     canvas.clear();
@@ -121,7 +119,7 @@ pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
                     keycode: Some(Keycode::Space),
                     ..
                 } => {
-                    cpu.lock().unwrap().exec();
+                    cpu.exec();
                     refresh = true
                 }
                 Event::KeyDown {
@@ -161,7 +159,7 @@ pub fn run(cpu: Arc<Mutex<CPU>>) -> Result<(), String> {
                     keycode: Some(Keycode::R),
                     ..
                 } => {
-                    cpu.lock().unwrap().reset();
+                    cpu.reset();
                     refresh = true
                 }
                 Event::KeyDown {
@@ -227,7 +225,7 @@ pub fn new() -> Result<(Sdl, Canvas<Window>, Sdl2TtfContext), String> {
 }
 
 pub fn update(
-    cpu: &Arc<Mutex<CPU>>,
+    cpu: &CPU,
     canvas: &mut Canvas<Window>,
     font: &mut Font,
     view_memory_start: u16,
@@ -259,27 +257,25 @@ pub fn update(
 
     current_line += 2;
 
-    let _cpu = cpu.lock().unwrap();
-
     let (instruction, addressing_mode): (Instruction, AddressingMode) =
-        get_instruction(_cpu.read(_cpu.get_pc()));
-    let arg = addressing_mode.get(&_cpu);
-    let txt = format!("PC: {:#06X} -> {} {}", _cpu.get_pc().0, instruction, arg);
+        get_instruction(cpu.read(cpu.get_pc()));
+    let arg = addressing_mode.get(cpu);
+    let txt = format!("PC: {:#06X} -> {} {}", cpu.get_pc().0, instruction, arg);
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
     let txt = format!(
         "A: {:#04X},  X: {:#04X}",
-        _cpu.get_reg(Register::A).0,
-        _cpu.get_reg(Register::X).0
+        cpu.get_reg(Register::A).0,
+        cpu.get_reg(Register::X).0
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
     let txt = format!(
         "Y: {:#04X}, SP: {:#04X}",
-        _cpu.get_reg(Register::Y).0,
-        _cpu.get_sp().0
+        cpu.get_reg(Register::Y).0,
+        cpu.get_sp().0
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
@@ -287,18 +283,18 @@ pub fn update(
 
     let txt = format!(
         "C: {}, Z: {}, I: {}, D: -",
-        _cpu.get_reg(Register::PS) & Flag::Carry,
-        _cpu.get_reg(Register::PS) & Flag::Zero,
-        _cpu.get_reg(Register::PS) & Flag::InterruptDisable,
+        cpu.get_reg(Register::PS) & Flag::Carry,
+        cpu.get_reg(Register::PS) & Flag::Zero,
+        cpu.get_reg(Register::PS) & Flag::InterruptDisable,
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
     current_line += 1;
 
     let txt = format!(
         "B: {}, V: {}, N: {}",
-        _cpu.get_reg(Register::PS) & Flag::Break,
-        _cpu.get_reg(Register::PS) & Flag::Overflow,
-        _cpu.get_reg(Register::PS) & Flag::Negative
+        cpu.get_reg(Register::PS) & Flag::Break,
+        cpu.get_reg(Register::PS) & Flag::Overflow,
+        cpu.get_reg(Register::PS) & Flag::Negative
     );
     blit_text(&txt, font, &mut surface, REGISTER_RIGHT, current_line * L)?;
 
@@ -318,7 +314,7 @@ pub fn update(
 
     for byte in 0..16 {
         let data: Vec<String> = (0..16)
-            .map(|b| format!("{:02x}", _cpu.read(STACK_START + b + 16 * byte).0))
+            .map(|b| format!("{:02x}", cpu.read(STACK_START + b + 16 * byte).0))
             .collect();
         blit_text(
             &format!(
@@ -329,7 +325,7 @@ pub fn update(
             font,
             &mut surface,
             STACK_RIGHT,
-            L * (current_line + byte as i32),
+            L * (current_line + byte),
         )?;
     }
 
@@ -348,7 +344,7 @@ pub fn update(
 
     for byte in 0..16 {
         let data: Vec<String> = (0..16)
-            .map(|b| format!("{:02x}", _cpu.read(Addr::from(b + 16 * byte)).0))
+            .map(|b| format!("{:02x}", cpu.read(Addr::from(b + 16 * byte)).0))
             .collect();
 
         blit_text(
@@ -367,7 +363,7 @@ pub fn update(
             .map(|b| {
                 format!(
                     "{:02x}",
-                    _cpu.read(Addr::from(view_memory_start + b + 16 * byte)).0
+                    cpu.read(Addr::from(view_memory_start + b + 16 * byte)).0
                 )
             })
             .collect();

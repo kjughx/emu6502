@@ -1,9 +1,9 @@
 use crate::types::{Addr, Byte};
 use console::Term;
+use std::cell::UnsafeCell;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 
-use super::bus::Device;
+use super::Device;
 
 pub const KEY_DATA: Addr = Addr(0x5000);
 pub const KEY_READY: Addr = Addr(0x5001);
@@ -14,41 +14,43 @@ const ADDR_START: Addr = Addr(0x5000);
 const ADDR_END: Addr = Addr(0x5001);
 
 pub struct Keyboard {
-    data: VecDeque<u8>,
+    data: UnsafeCell<VecDeque<u8>>,
 }
 
 impl Keyboard {
     pub fn new() -> Keyboard {
         Self {
-            data: vec![].into(),
+            data: UnsafeCell::new(VecDeque::new()),
         }
     }
 
-    pub fn poll(keyboard: Arc<Mutex<Keyboard>>) {
+    pub fn poll(keyboard: &Keyboard) {
         let term = Term::stdout();
         loop {
             let c = match term.read_char() {
                 Err(_) => continue,
                 Ok(c) => c,
             };
-            keyboard.lock().unwrap().data.push_back(c as u8);
+            let data = unsafe { &mut *keyboard.data.get() };
+            data.push_back(c as u8);
         }
     }
 }
 
 impl Device for Keyboard {
-    fn tx(&mut self, addr: Addr) -> Byte {
+    fn tx(&self, addr: Addr) -> Byte {
+        let data = unsafe { &mut *self.data.get() };
         match addr {
             KEY_READY => {
-                if !self.data.is_empty() {
+                if !data.is_empty() {
                     READY
                 } else {
                     NOT_READY
                 }
             }
             KEY_DATA => {
-                if !self.data.is_empty() {
-                    Byte(self.data.pop_front().unwrap())
+                if !data.is_empty() {
+                    Byte(data.pop_front().unwrap())
                 } else {
                     Byte(0x00)
                 }
@@ -56,7 +58,6 @@ impl Device for Keyboard {
             _ => unreachable!("Unsupported read :{addr:?}"),
         }
     }
-
 
     fn range(&self) -> (Addr, Addr) {
         (ADDR_START, ADDR_END)
