@@ -2,7 +2,7 @@ pub mod hardware;
 pub mod types;
 
 #[macro_export]
-macro_rules! Mutex(
+macro_rules! mutex(
     ($b:expr) => (
         Arc::new(Mutex::new($b))
     )

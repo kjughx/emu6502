@@ -2,7 +2,7 @@ use clap::Parser;
 use emu_6502::hardware::display::Display;
 use emu_6502::hardware::keyboard::Keyboard;
 use emu_6502::hardware::rom::Rom;
-use emu_6502::Mutex;
+use emu_6502::mutex;
 use emu_6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
 
 use std::sync::{Arc, Mutex};
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bus.register(display)?;
     bus.register(rom)?;
 
-    let mut cpu = CPU::new(Mutex!(bus));
+    let mut cpu = CPU::new(mutex!(bus));
     cpu.reset();
 
     if args.visualize {
