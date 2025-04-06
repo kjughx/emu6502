@@ -32,12 +32,14 @@ impl Device for Display {
             std::io::stdout().flush().unwrap();
         }
     }
+
     fn tx(&self, addr: Addr) -> Byte {
         match addr {
             KEY_READY => READY,
             _ => Byte(0x00),
         }
     }
+
     fn range(&self) -> (Addr, Addr) {
         (ADDR_START, ADDR_END)
     }

@@ -6,7 +6,6 @@ pub mod memory;
 pub mod rom;
 pub mod serial;
 
-
 use crate::types::{Addr, Byte};
 
 /// Trait for devices on `Bus`

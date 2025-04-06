@@ -1,8 +1,8 @@
-use emu_6502::hardware::cpu::{
+use e6502::hardware::cpu::{
     instructions::{get_instruction, AddressingMode, Instruction},
     Flag, Register, CPU, STACK_START,
 };
-use emu_6502::types::Addr;
+use e6502::types::Addr;
 use sdl2::surface::Surface;
 use sdl2::{event::Event, keyboard::Keycode};
 use sdl2::{pixels::Color, rect::Rect, render::Canvas, ttf, video::Window};
@@ -95,7 +95,7 @@ fn prompt(txt: &str, canvas: &mut Canvas<Window>, font: &mut Font) -> Result<(),
     Ok(())
 }
 
-pub fn run(mut cpu: CPU) -> Result<(), String> {
+pub fn run(mut cpu: CPU, step: bool) -> Result<(), String> {
     let (ctx, mut canvas, ttf) = new()?;
     canvas.set_draw_color(BACKGROUND_COLOR);
     canvas.clear();
@@ -103,6 +103,7 @@ pub fn run(mut cpu: CPU) -> Result<(), String> {
     let mut event_pump = ctx.event_pump()?;
     let mut refresh = true;
     let mut input = false;
+    let mut pause = step;
     let mut memory_view_start = 0x7f00;
     let mut input_buffer = vec![];
     let mut prompt_text: &str = "";
@@ -114,13 +115,19 @@ pub fn run(mut cpu: CPU) -> Result<(), String> {
                 | Event::KeyDown {
                     keycode: Some(Keycode::Escape),
                     ..
+                } | Event::KeyDown {
+                    keycode: Some(Keycode::Q),
+                    ..
                 } => break 'running,
                 Event::KeyDown {
                     keycode: Some(Keycode::Space),
                     ..
                 } => {
+                    if !pause {
+                        continue;
+                    }
                     cpu.exec();
-                    refresh = true
+                    refresh = true;
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Return),
@@ -163,6 +170,18 @@ pub fn run(mut cpu: CPU) -> Result<(), String> {
                     refresh = true
                 }
                 Event::KeyDown {
+                    keycode: Some(Keycode::P),
+                    ..
+                } => {
+                    pause = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::C),
+                    ..
+                } => {
+                    pause = false;
+                }
+                Event::KeyDown {
                     keycode: Some(Keycode::Slash),
                     ..
                 } => {
@@ -174,7 +193,7 @@ pub fn run(mut cpu: CPU) -> Result<(), String> {
             }
         }
 
-        if refresh {
+        if refresh || !pause {
             canvas.set_draw_color(BACKGROUND_COLOR);
             canvas.clear();
             update(&cpu, &mut canvas, &mut font, memory_view_start)?;

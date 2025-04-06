@@ -1,9 +1,9 @@
 use clap::Parser;
-use emu_6502::hardware::display::Display;
-use emu_6502::hardware::keyboard::Keyboard;
-use emu_6502::hardware::rom::Rom;
-use emu_6502::mutex;
-use emu_6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
+use e6502::hardware::display::Display;
+use e6502::hardware::keyboard::Keyboard;
+use e6502::hardware::rom::Rom;
+use e6502::mutex;
+use e6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
 
 use std::sync::{Arc, Mutex};
 
@@ -17,6 +17,9 @@ struct Args {
 
     #[arg(long)]
     visualize: bool,
+
+    #[arg(long)]
+    step: bool,
 }
 
 #[allow(arithmetic_overflow)]
@@ -37,18 +40,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bus.register(rom)?;
 
     let mut cpu = CPU::new(mutex!(bus));
+
+    // Ready, set, go!
     cpu.reset();
 
-    if args.visualize {
-        visualize::run(cpu)?;
-    } else {
-        loop {
-            if !cpu.exec() {
-                break;
-            }
-        }
-        visualize::run(cpu)?;
-    }
+    visualize::run(cpu, args.step)?;
 
     Ok(())
 }

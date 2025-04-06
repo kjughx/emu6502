@@ -1,0 +1,10 @@
+[package]
+name = "e6502"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+clap = {workspace = true}
+console = {workspace = true}
+phf = {workspace = true}
+sdl2 = {workspace = true}

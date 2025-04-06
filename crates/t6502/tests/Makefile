@@ -14,8 +14,8 @@ OBJS = $(SRCS:%.s=%.bin)
 all: $(OBJS)
 
 %.bin: %.s
-	./ca65 -l $*.lst $<
-	./ld65 $*.o -o ../../hardware/cpu/instructions/$@ -m $*.map -C script.ld
+	./cc65/bin/ca65 -l $*.lst $<
+	./cc65/bin/ld65 $*.o -o ../../hardware/cpu/instructions/$@ -m $*.map -C script.ld
 	@rm -f $*.o $*.map
 
 
