@@ -2,7 +2,6 @@ use super::cpu::instructions::*;
 use crate::hardware::bus::Bus;
 use crate::types::*;
 use std::fmt::Display;
-use std::sync::{Arc, Mutex};
 pub mod instructions;
 
 pub const STACK_START: Addr = Addr(0x100);
@@ -56,7 +55,7 @@ pub struct CPU {
     y: Byte, // Index Register Y
 
     ps: Byte, // Processor Status
-    bus: Arc<Mutex<Bus>>,
+    bus: Bus,
 
     irq_pending: bool,
     nmi_pending: bool,
@@ -64,7 +63,7 @@ pub struct CPU {
 
 impl CPU {
     /// Create a CPU instance connected on `bus`
-    pub fn new(bus: Arc<Mutex<Bus>>) -> Self {
+    pub fn new(bus: Bus) -> Self {
         Self {
             pc: Addr(0xfffc),
             sp: Byte(0xfd),
@@ -97,10 +96,10 @@ impl CPU {
     ///
     /// Note: This decrements the stack pointer
     pub fn push_stack(&mut self, data: Byte) {
-        self.bus.lock().unwrap().write(STACK_START + self.sp, data);
+        self.bus.write(STACK_START + self.sp, data);
 
         if self.sp == 0 {
-            self.sp = Byte::from(STACK_END & 0xFF);
+            self.sp = STACK_END.low()
         } else {
             self.sp -= 1;
         }
@@ -116,12 +115,12 @@ impl CPU {
             self.sp += 1;
         }
 
-        self.bus.lock().unwrap().read(STACK_START + self.sp)
+        self.bus.read(STACK_START + self.sp)
     }
 
     /// Read from the `bus` at `addr`
-    pub fn read(&self, addr: Addr) -> Byte {
-        self.bus.lock().unwrap().read(addr)
+    pub fn read(&self, addr: impl Into<Addr>) -> Byte {
+        self.bus.read(addr.into())
     }
 
     /// Write `data` to the `bus` at `addr`
@@ -131,7 +130,7 @@ impl CPU {
             "tried to write to stack at {:#06X}",
             addr.0
         );
-        self.bus.lock().unwrap().write(addr, data)
+        self.bus.write(addr, data)
     }
 
     /// Emulate a hard reset
@@ -144,9 +143,9 @@ impl CPU {
 
         self.set(Flag::InterruptDisable, Bit(true));
 
-        let low_addr = self.read(Addr::from(0xfffc));
-        let hi_addr = Addr::from(self.read(Addr::from(0xfffd)));
-        self.pc = (hi_addr << 8) | low_addr;
+        let low_addr = self.read(0xfffc);
+        let hi_addr = self.read(0xfffd);
+        self.pc = Addr::new(hi_addr, low_addr);
     }
 
     /// Handle an interrupt request
@@ -155,27 +154,27 @@ impl CPU {
             return;
         }
 
-        self.push_stack(Byte::from(self.pc & 0x00ff));
-        self.push_stack(Byte::from(self.pc & 0xff00));
+        self.push_stack(self.pc.low());
+        self.push_stack(self.pc.high());
         self.push_stack(self.ps);
 
         self.set(Flag::InterruptDisable, Bit(true));
 
-        let low_addr = self.read(Addr::from(0xfffe));
-        let hi_addr = self.read(Addr::from(0xffff));
-        self.pc = (Addr::from(hi_addr) << 8) | low_addr;
+        let low_addr = self.read(0xfffe);
+        let hi_addr = self.read(0xffff);
+        self.pc = Addr::new(hi_addr, low_addr);
     }
 
     /// Handle a non-maskable interrupt
     fn nmi_irq(&mut self) {
         self.set(Flag::InterruptDisable, Bit(true));
 
-        self.push_stack(Byte::from(self.pc & 0x00ff));
-        self.push_stack(Byte::from(self.pc & 0xff00));
+        self.push_stack(self.pc.low());
+        self.push_stack(self.pc.high());
         self.push_stack(self.ps);
-        let low_addr = self.read(Addr::from(0xfffa));
-        let hi_addr = self.read(Addr::from(0xfffb));
-        self.pc = (Addr::from(hi_addr) << 8) | low_addr;
+        let low_addr = self.read(0xfffa);
+        let hi_addr = self.read(0xfffb);
+        self.pc = Addr::new(hi_addr, low_addr);
     }
 
     /// Set a pending interrupt request

@@ -55,22 +55,22 @@ impl AddressingMode {
             AddressingMode::Absolute => {
                 let low_addr = cpu.read(cpu.pc + 1);
                 let hi_addr = cpu.read(cpu.pc + 2);
-                InstructionArgument::Address(Addr::from(hi_addr) << 8 | low_addr)
+                InstructionArgument::Address(Addr::new(hi_addr, low_addr))
             }
             AddressingMode::AbsoluteX => {
                 let low_addr = cpu.read(cpu.pc + 1);
                 let hi_addr = cpu.read(cpu.pc + 2);
-                InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.x)
+                InstructionArgument::Address(Addr::new(hi_addr, low_addr) + cpu.x)
             }
             AddressingMode::AbsoluteY => {
                 let low_addr = cpu.read(cpu.pc + 1);
                 let hi_addr = cpu.read(cpu.pc + 2);
-                InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
+                InstructionArgument::Address(Addr::new(hi_addr, low_addr) + cpu.y)
             }
             AddressingMode::Indirect => {
                 let low_addr = cpu.read(cpu.pc + 1);
                 let hi_addr = cpu.read(cpu.pc + 2);
-                let _addr = (Addr::from(hi_addr) << 8) | low_addr;
+                let _addr = Addr::new(hi_addr, low_addr);
                 InstructionArgument::Address(
                     (Addr::from(cpu.read(_addr + 1)) << 8) | cpu.read(_addr),
                 )
@@ -85,7 +85,7 @@ impl AddressingMode {
                 let _addr = Addr::from(cpu.read(cpu.pc + 1));
                 let low_addr = cpu.read(_addr);
                 let hi_addr = cpu.read(_addr + 1);
-                InstructionArgument::Address(((Addr::from(hi_addr) << 8) | low_addr) + cpu.y)
+                InstructionArgument::Address(Addr::new(hi_addr, low_addr) + cpu.y)
             }
             AddressingMode::Relative => InstructionArgument::Offset(cpu.read(cpu.pc + 1)),
             AddressingMode::Implied => InstructionArgument::Implied,

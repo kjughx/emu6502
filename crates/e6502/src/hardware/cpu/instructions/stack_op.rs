@@ -78,8 +78,6 @@ mod test {
     #[test]
     pub fn test_stack() {
         use crate::hardware::*;
-        use crate::mutex;
-        use std::sync::{Arc, Mutex};
 
         let mut bus = bus::Bus::new();
         let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
@@ -89,7 +87,7 @@ mod test {
             bus.write(Addr(i as u16), Byte(*byte));
         }
 
-        let mut cpu = cpu::CPU::new(mutex!(bus));
+        let mut cpu = cpu::CPU::new(bus);
         cpu.set_pc(Addr(0x0400));
 
         let mut instructions = 0;

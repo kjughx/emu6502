@@ -2,10 +2,7 @@ use clap::Parser;
 use e6502::hardware::display::Display;
 use e6502::hardware::keyboard::Keyboard;
 use e6502::hardware::rom::Rom;
-use e6502::mutex;
 use e6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
-
-use std::sync::{Arc, Mutex};
 
 mod visualize;
 
@@ -39,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bus.register(display)?;
     bus.register(rom)?;
 
-    let mut cpu = CPU::new(mutex!(bus));
+    let mut cpu = CPU::new(bus);
 
     // Ready, set, go!
     cpu.reset();

@@ -10,6 +10,17 @@ pub struct Byte(pub u8);
 
 #[derive(PartialOrd, PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Addr(pub u16);
+impl Addr {
+    pub fn new(high: impl Into<Byte>, low: impl Into<Byte>) -> Self {
+        Self(((high.into().0 as u16) << 8) | low.into().0 as u16)
+    }
+    pub fn high(&self) -> Byte {
+        Byte((self.0 >> 8) as u8)
+    }
+    pub fn low(&self) -> Byte {
+        Byte((self.0 & 0x00ff) as u8)
+    }
+}
 
 #[derive(PartialEq, PartialOrd, Debug)]
 pub struct Bit(pub bool);
