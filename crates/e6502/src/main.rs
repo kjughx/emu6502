@@ -1,10 +1,14 @@
+#![allow(arithmetic_overflow)]
 use clap::Parser;
+use e6502::debugger::Debugger;
+use e6502::hardware::clock::Clock;
 use e6502::hardware::display::Display;
 use e6502::hardware::keyboard::Keyboard;
 use e6502::hardware::rom::Rom;
 use e6502::{hardware::bus::Bus, hardware::cpu::CPU, hardware::memory::Memory};
+use std::sync::Arc;
 
-mod visualize;
+// mod visualize;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -16,7 +20,7 @@ struct Args {
     visualize: bool,
 
     #[arg(long)]
-    step: bool,
+    debug: bool,
 }
 
 #[allow(arithmetic_overflow)]
@@ -30,18 +34,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let keyboard = Keyboard::new();
     let display = Display::new();
+    let clk = Arc::new(Clock::new());
 
     bus.register(memory)?;
     bus.register(keyboard)?;
     bus.register(display)?;
     bus.register(rom)?;
 
-    let mut cpu = CPU::new(bus);
+    let mut cpu = CPU::new(bus, clk.clone());
+    if args.debug {
+        Debugger::new(cpu, true).start();
+    }
 
-    // Ready, set, go!
-    cpu.reset();
+    std::thread::spawn(move || {
+        cpu.reset();
+        println!("Ready, set, go!");
+        loop {
+            cpu.exec();
+        }
+    });
 
-    visualize::run(cpu, args.step)?;
-
-    Ok(())
+    loop {
+        clk.tick();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        clk.wait_tock();
+    }
 }

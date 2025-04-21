@@ -123,7 +123,7 @@ pub enum Instruction {
     SEC, SED, SEI, STA,
     STX, STY, TAX, TAY,
     TSX, TXA, TXS, TYA,
-    XXX,
+    XXX(u8),
 }
 
 #[rustfmt::skip]
@@ -158,7 +158,7 @@ impl Display for Instruction {
             Instruction::TAX => "TAX", Instruction::TAY => "TAY",
             Instruction::TSX => "TSX", Instruction::TXA => "TXA",
             Instruction::TXS => "TXS", Instruction::TYA => "TYA",
-            Instruction::XXX => "XXX",
+            Instruction::XXX(_) => "XXX",
         };
         write!(f, "{txt}")
     }
@@ -196,7 +196,7 @@ impl From<&str> for Instruction {
             "TAX" => Instruction::TAX, "TAY" => Instruction::TAY,
             "TSX" => Instruction::TSX, "TXA" => Instruction::TXA,
             "TXS" => Instruction::TXS, "TYA" => Instruction::TYA,
-            _ => Instruction::XXX,
+            _ => Instruction::XXX(0xff),
         }
     }
 }
@@ -269,7 +269,8 @@ impl Instruction {
             Instruction::SEI => flag::sei(arg, cpu),
 
             Instruction::NOP => true,
-            Instruction::XXX => {
+            Instruction::XXX(i) => {
+                println!("ILLEGAL: {:x}", i);
                 cpu.halt(Some("Illegal Instruction"));
                 false
             }
@@ -497,25 +498,28 @@ impl Instruction {
             Instruction::INY => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::RTI => matches!(addressing_mode, AddressingMode::Implied),
             Instruction::TYA => matches!(addressing_mode, AddressingMode::Implied),
-            Instruction::XXX => matches!(addressing_mode, AddressingMode::Implied),
+            Instruction::XXX(_) => matches!(addressing_mode, AddressingMode::Implied),
         }
     }
+
+    #[todop::todo]
+    pub fn new(_ins: Instruction, _arg: InstructionArgument) -> Self {}
 }
 
 pub fn get_instruction(op_code: Byte) -> (Instruction, AddressingMode) {
-    if INSTRUCTIONS.contains_key(&op_code) {
-        INSTRUCTIONS[&op_code.0]
+    if OPCODES.contains_key(&op_code) {
+        OPCODES[&op_code.0]
     } else if matches!(
         op_code.0,
         0x02 | 0x12 | 0x22 | 0x32 | 0x42 | 0x52 | 0x62 | 0x72 | 0x92 | 0xB2 | 0xD2 | 0xF2
     ) {
-        (Instruction::XXX, AddressingMode::Implied)
+        (Instruction::XXX(op_code.0), AddressingMode::Implied)
     } else {
         (Instruction::NOP, AddressingMode::Implied)
     }
 }
 
-pub static INSTRUCTIONS: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! {
+pub static OPCODES: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! {
     0x69u8 => (Instruction::ADC, AddressingMode::Immediate),
     0x65u8 => (Instruction::ADC, AddressingMode::ZeroPage),
     0x75u8 => (Instruction::ADC, AddressingMode::ZeroPageX),
@@ -700,5 +704,16 @@ pub static INSTRUCTIONS: phf::Map<u8, (Instruction, AddressingMode)> = phf_map! 
     0xC8u8 => (Instruction::INY, AddressingMode::Implied),
     0x40u8 => (Instruction::RTI, AddressingMode::Implied),
     0x98u8 => (Instruction::TYA, AddressingMode::Implied),
-    0xffu8 => (Instruction::XXX, AddressingMode::Implied),
+    0xffu8 => (Instruction::XXX(0xff), AddressingMode::Implied),
 };
+
+#[cfg(test)]
+pub const INSTRUCTIONS: std::cell::LazyCell<
+    std::collections::HashMap<(Instruction, AddressingMode), u8>,
+> = std::cell::LazyCell::new(|| {
+    let mut map = std::collections::HashMap::new();
+    for (key, val) in OPCODES.entries() {
+        map.insert(*val, *key);
+    }
+    map
+});

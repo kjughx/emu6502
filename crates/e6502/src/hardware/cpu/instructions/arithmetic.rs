@@ -54,22 +54,25 @@ pub fn sbc(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 
 #[cfg(test)]
 mod test {
+    use crate::hardware::*;
+
     #[test]
     pub fn test_arithmetic() {
+        use crate::hardware::cpu::system;
         use crate::hardware::*;
 
-        let mut bus = bus::Bus::new();
-        let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
-        bus.register(memory).unwrap();
-
+        let mut system = system::System::new().pc(0x400);
         for (i, byte) in include_bytes!("arithmetic.bin").iter().enumerate() {
-            bus.write(Addr(i as u16), Byte(*byte));
+            system.set_memory(i as u16, *byte);
         }
 
-        let mut cpu = cpu::CPU::new(bus);
-        cpu.set_pc(Addr(0x0400));
+        let (mut cpu, clk) = system.prepare();
 
         let mut instructions = 0;
+        std::thread::spawn(move || loop {
+            clk.tick();
+            clk.wait_tock();
+        });
 
         loop {
             if !cpu.exec() {
@@ -85,5 +88,26 @@ mod test {
             "Failure: {:#06X}",
             cpu.get_pc().0
         );
+    }
+
+    use crate::hardware::cpu::system;
+
+    #[test]
+    fn test_adc() {
+        let (mut cpu, clk) = system::System::new()
+            .memory(0x0400, 0x69)
+            .memory(0x0401, 0x34)
+            .pc(0x400)
+            .a(0x35)
+            .prepare();
+
+        std::thread::spawn(move || loop {
+            clk.tick();
+            clk.wait_tock();
+        });
+
+        cpu.exec();
+        assert_eq!(cpu.a, Byte(0x69));
+        assert_eq!(cpu.clk.ticks(), 4);
     }
 }

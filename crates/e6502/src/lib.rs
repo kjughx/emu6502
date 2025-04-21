@@ -1,3 +1,4 @@
+pub mod debugger;
 pub mod hardware;
 pub mod types;
 

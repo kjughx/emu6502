@@ -1,4 +1,5 @@
 pub mod bus;
+pub mod clock;
 pub mod cpu;
 pub mod display;
 pub mod keyboard;
@@ -9,7 +10,7 @@ pub mod serial;
 use crate::types::{Addr, Byte};
 
 /// Trait for devices on `Bus`
-pub trait Device {
+pub trait Device: Send {
     /// Someone writes `data` to `addr` belonging to this device
     ///
     /// Note: The device does not necessarily need to support this.
@@ -23,4 +24,3 @@ pub trait Device {
 
     fn range(&self) -> (Addr, Addr);
 }
-

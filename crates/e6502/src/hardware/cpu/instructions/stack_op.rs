@@ -54,7 +54,7 @@ pub fn pha(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 
 pub fn php(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     assert!(matches!(arg, InstructionArgument::Implied));
-    cpu.push_stack(cpu.get_reg(Register::PS) | Flag::Break);
+    cpu.push_stack(cpu.get_reg(Register::PS).unwrap_left() | Flag::Break);
     true
 }
 
@@ -77,20 +77,21 @@ pub fn plp(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 mod test {
     #[test]
     pub fn test_stack() {
+        use crate::hardware::cpu::system;
         use crate::hardware::*;
 
-        let mut bus = bus::Bus::new();
-        let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
-        bus.register(memory).unwrap();
-
+        let mut system = system::System::new().pc(0x400);
         for (i, byte) in include_bytes!("stack.bin").iter().enumerate() {
-            bus.write(Addr(i as u16), Byte(*byte));
+            system.set_memory(i as u16, *byte);
         }
 
-        let mut cpu = cpu::CPU::new(bus);
-        cpu.set_pc(Addr(0x0400));
+        let (mut cpu, clk) = system.prepare();
 
         let mut instructions = 0;
+        std::thread::spawn(move || loop {
+            clk.tick();
+            clk.wait_tock();
+        });
 
         loop {
             if !cpu.exec() {

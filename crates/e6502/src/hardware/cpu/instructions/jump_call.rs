@@ -6,7 +6,14 @@ pub fn jmp(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let InstructionArgument::Address(addr) = arg else {
         unreachable!("Illegal addressing mode: {:?}", arg);
     };
+
+    if cpu.pc - 2 == addr {
+        cpu.trap();
+    }
+
     cpu.pc = addr;
+
+    cpu.advance = false;
 
     false
 }
@@ -16,8 +23,9 @@ pub fn jsr(arg: InstructionArgument, cpu: &mut CPU) -> bool {
         unreachable!("Illegal addressing mode: {:?}", arg);
     };
     cpu.push_stack(Byte::from(cpu.pc >> 8));
-    cpu.push_stack(Byte::from((cpu.pc & 0x00ff) + 2));
+    cpu.push_stack(Byte::from(cpu.pc & 0x00ff));
     cpu.pc = addr;
+    cpu.advance = false;
 
     false
 }
@@ -26,7 +34,7 @@ pub fn rts(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     assert!(matches!(arg, InstructionArgument::Implied));
     let low_addr = cpu.pop_stack();
     let hi_addr = cpu.pop_stack();
-    cpu.pc = (Addr::from(hi_addr) << 8) | (low_addr + 1);
+    cpu.pc = Addr::new(hi_addr, low_addr);
 
     false
 }
@@ -43,6 +51,8 @@ pub fn brk(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let hi_addr = cpu.read(Addr::from(0xffff));
     cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
     cpu.set(Flag::InterruptDisable, Bit(true));
+    cpu.advance = false;
+
     false
 }
 
@@ -55,6 +65,8 @@ pub fn rti(arg: InstructionArgument, cpu: &mut CPU) -> bool {
     let low_addr = cpu.pop_stack();
     let hi_addr = cpu.pop_stack();
     cpu.pc = (Addr::from(hi_addr) << 8) | low_addr;
+    cpu.advance = false;
+
     false
 }
 
@@ -62,20 +74,21 @@ pub fn rti(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 mod test {
     #[test]
     pub fn test_jump_call() {
+        use crate::hardware::cpu::system;
         use crate::hardware::*;
 
-        let mut bus = bus::Bus::new();
-        let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
-        bus.register(memory).unwrap();
-
+        let mut system = system::System::new().pc(0x400);
         for (i, byte) in include_bytes!("jump_call.bin").iter().enumerate() {
-            bus.write(Addr(i as u16), Byte(*byte));
+            system.set_memory(i as u16, *byte);
         }
 
-        let mut cpu = cpu::CPU::new(bus);
-        cpu.set_pc(Addr(0x0400));
+        let (mut cpu, clk) = system.prepare();
 
         let mut instructions = 0;
+        std::thread::spawn(move || loop {
+            clk.tick();
+            clk.wait_tock();
+        });
 
         loop {
             if !cpu.exec() {
@@ -88,8 +101,9 @@ mod test {
         assert_eq!(
             cpu.get_pc(),
             Addr(0x0533),
-            "Failure: {:#06X}",
-            cpu.get_pc().0
+            "Failure: {:#06X},\n cpu: {}",
+            cpu.get_pc().0,
+            cpu,
         );
     }
 }

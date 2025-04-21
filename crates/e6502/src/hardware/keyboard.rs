@@ -17,6 +17,12 @@ pub struct Keyboard {
     data: UnsafeCell<VecDeque<u8>>,
 }
 
+impl Default for Keyboard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Keyboard {
     pub fn new() -> Keyboard {
         Self {

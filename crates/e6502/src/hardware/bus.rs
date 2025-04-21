@@ -51,7 +51,9 @@ impl Bus {
     }
 
     /// Write on bus `data` to address `addr`
-    pub fn write(&mut self, addr: Addr, data: Byte) {
+    pub fn write(&mut self, addr: impl Into<Addr>, data: impl Into<Byte>) {
+        let addr = addr.into();
+        let data = data.into();
         if !self.indices.contains_key(&addr.0) {
             eprintln!("Nothing registered at {:#06X}", addr.0);
             return;

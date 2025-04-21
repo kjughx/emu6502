@@ -60,7 +60,6 @@ pub fn cmp(arg: InstructionArgument, cpu: &mut CPU) -> bool {
         InstructionArgument::Address(addr) => cpu.read(addr),
         _ => unreachable!("Illegal addressing mode: {:?}", arg),
     };
-
     cpu.set(Flag::Carry, Bit(cpu.a >= val));
     cpu.set(Flag::Zero, Bit(cpu.a == val));
     cpu.set(Flag::Negative, Bit(cpu.a < val));
@@ -100,27 +99,31 @@ pub fn cpy(arg: InstructionArgument, cpu: &mut CPU) -> bool {
 mod test {
     #[test]
     pub fn test_logical() {
+        use crate::hardware::cpu::system;
         use crate::hardware::*;
 
-        let mut bus = bus::Bus::new();
-        let memory = memory::Memory::new(Addr(0x0000), Addr(0xffff));
-        bus.register(memory).unwrap();
-
+        let mut system = system::System::new().pc(0x400);
         for (i, byte) in include_bytes!("logical.bin").iter().enumerate() {
-            bus.write(Addr(i as u16), Byte(*byte));
+            system.set_memory(i as u16, *byte);
         }
 
-        let mut cpu = cpu::CPU::new(bus);
-        cpu.set_pc(Addr(0x0400));
+        let (mut cpu, clk) = system.prepare();
 
         let mut instructions = 0;
+        std::thread::spawn(move || loop {
+            clk.tick();
+            clk.wait_tock();
+        });
 
         loop {
             if !cpu.exec() {
                 break;
             }
             instructions += 1;
-            assert!(instructions <= 3977, "Too many instructions!");
+            assert!(
+                instructions <= 3977,
+                "Too many instructions: {instructions}"
+            );
         }
 
         assert_eq!(

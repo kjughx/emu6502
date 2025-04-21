@@ -8,3 +8,5 @@ clap = {workspace = true}
 console = {workspace = true}
 phf = {workspace = true}
 sdl2 = {workspace = true}
+either = "1.15.0"
+rustyline = "15.0.0"
