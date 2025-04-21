@@ -1,0 +1,2 @@
+crates/t6502/tests/*.s linguist-vendored
+crates/t6502/wozmon.s linguist-vendored

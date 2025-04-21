@@ -1,3 +1,5 @@
+;;  Likely from here: https://github.com/jefftranter/6502/blob/master/asm/wozmon/wozmon.s
+
 XAML  = $24                            ; Last "opened" location Low
 XAMH  = $25                            ; Last "opened" location High
 STL   = $26                            ; Store address Low
